@@ -1,0 +1,25 @@
+{
+  "codeCommand": "code",
+  "monitor": "primary",
+  "gap": 8,
+  "useDedicatedUserDataDirs": true,
+  "launchTimeoutSeconds": 25,
+  "slots": [
+    {
+      "name": "A",
+      "path": "C:\\work\\repo-a"
+    },
+    {
+      "name": "B",
+      "path": "C:\\work\\repo-b"
+    },
+    {
+      "name": "C",
+      "path": "C:\\work\\repo-c"
+    },
+    {
+      "name": "D",
+      "path": "C:\\work\\repo-d"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+bin/
+obj/
+.vs/
+.vscode/
+.vscode-square/
+.dotnet_home/
+config/vscode-square.json
