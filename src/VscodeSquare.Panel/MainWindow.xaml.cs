@@ -105,6 +105,16 @@ public partial class MainWindow : Window
         _statusStore.Message = "Window status refreshed.";
     }
 
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
     private void FocusSlotButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not FrameworkElement { Tag: WindowSlot slot })
