@@ -48,7 +48,7 @@ public sealed class VscodeLauncher
 
         foreach (var slot in launchTargets)
         {
-            DiagnosticLog.Write($"Starting VS Code for slot {slot.Name}: {resolvedCodeCommand} {GetLaunchLogArguments(slot, config)}");
+            DiagnosticLog.Write($"Starting VS Code for slot {slot.Name}: {resolvedCodeCommand} {GetLaunchArguments(slot, config)}");
             StartCode(resolvedCodeCommand, slot, config);
             await Task.Delay(350, cancellationToken);
         }
@@ -125,9 +125,10 @@ public sealed class VscodeLauncher
         }
 
         arguments.Add("--new-window");
-        if (!string.IsNullOrWhiteSpace(slot.Path))
+        var launchPath = GetLaunchPath(slot, config);
+        if (!string.IsNullOrWhiteSpace(launchPath))
         {
-            arguments.Add(slot.Path);
+            arguments.Add(launchPath);
         }
     }
 
@@ -141,17 +142,13 @@ public sealed class VscodeLauncher
         }
 
         arguments.Add("--new-window");
-        if (!string.IsNullOrWhiteSpace(slot.Path))
+        var launchPath = GetLaunchPath(slot, config);
+        if (!string.IsNullOrWhiteSpace(launchPath))
         {
-            arguments.Add(Quote(slot.Path));
+            arguments.Add(Quote(launchPath));
         }
 
         return string.Join(" ", arguments);
-    }
-
-    private static string GetLaunchLogArguments(WindowSlot slot, AppConfig config)
-    {
-        return GetLaunchArguments(slot, config);
     }
 
     private static string GetUserDataDirectory(WindowSlot slot, AppConfig config)
@@ -163,6 +160,22 @@ public sealed class VscodeLauncher
         }
 
         return Path.Combine(config.StateDirectory, "user-data", safeSlotName);
+    }
+
+    private static string? GetLaunchPath(WindowSlot slot, AppConfig config)
+    {
+        if (!config.ReopenLastWorkspace)
+        {
+            return slot.Path;
+        }
+
+        var userDataDirectory = GetUserDataDirectory(slot, config);
+        if (Directory.Exists(userDataDirectory) && Directory.EnumerateFileSystemEntries(userDataDirectory).Any())
+        {
+            return null;
+        }
+
+        return slot.Path;
     }
 
     private static string? ResolveCodeCommand(string codeCommand)

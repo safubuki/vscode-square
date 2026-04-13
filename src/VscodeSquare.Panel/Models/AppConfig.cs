@@ -21,6 +21,8 @@ public sealed class AppConfig
 
     public bool UseDedicatedUserDataDirs { get; set; } = true;
 
+    public bool ReopenLastWorkspace { get; set; } = true;
+
     public string StateDirectory { get; set; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "VscodeSquare");
@@ -94,14 +96,12 @@ public sealed class AppConfig
 
     private static List<SlotConfig> DefaultSlots()
     {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
         return
         [
-            new() { Name = "A", Path = home },
-            new() { Name = "B", Path = home },
-            new() { Name = "C", Path = home },
-            new() { Name = "D", Path = home }
+            new() { Name = "A", Path = string.Empty },
+            new() { Name = "B", Path = string.Empty },
+            new() { Name = "C", Path = string.Empty },
+            new() { Name = "D", Path = string.Empty }
         ];
     }
 }

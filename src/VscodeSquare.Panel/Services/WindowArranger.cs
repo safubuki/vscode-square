@@ -5,6 +5,8 @@ namespace VscodeSquare.Panel.Services;
 
 public sealed class WindowArranger
 {
+    private const uint WM_CLOSE = 0x0010;
+    private const int SW_MAXIMIZE = 3;
     private const int SW_RESTORE = 9;
     private const uint SWP_NOZORDER = 0x0004;
     private const uint SWP_NOOWNERZORDER = 0x0200;
@@ -53,6 +55,27 @@ public sealed class WindowArranger
         return SetForegroundWindow(windowHandle);
     }
 
+    public bool FocusMaximized(IntPtr windowHandle)
+    {
+        if (windowHandle == IntPtr.Zero || !IsWindow(windowHandle))
+        {
+            return false;
+        }
+
+        ShowWindow(windowHandle, SW_MAXIMIZE);
+        return SetForegroundWindow(windowHandle);
+    }
+
+    public bool Close(IntPtr windowHandle)
+    {
+        if (windowHandle == IntPtr.Zero || !IsWindow(windowHandle))
+        {
+            return false;
+        }
+
+        return PostMessage(windowHandle, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+    }
+
     private static WorkArea GetPrimaryWorkArea()
     {
         var monitor = MonitorFromWindow(IntPtr.Zero, MONITOR_DEFAULTTOPRIMARY);
@@ -81,6 +104,9 @@ public sealed class WindowArranger
 
     [DllImport("user32.dll")]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);

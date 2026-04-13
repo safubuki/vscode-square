@@ -3,23 +3,24 @@
   "monitor": "primary",
   "gap": 8,
   "useDedicatedUserDataDirs": true,
+  "reopenLastWorkspace": true,
   "launchTimeoutSeconds": 25,
   "slots": [
     {
       "name": "A",
-      "path": "C:\\work\\repo-a"
+      "path": ""
     },
     {
       "name": "B",
-      "path": "C:\\work\\repo-b"
+      "path": ""
     },
     {
       "name": "C",
-      "path": "C:\\work\\repo-c"
+      "path": ""
     },
     {
       "name": "D",
-      "path": "C:\\work\\repo-d"
+      "path": ""
     }
   ]
 }

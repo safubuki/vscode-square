@@ -4,19 +4,19 @@
         xmlns:models="clr-namespace:VscodeSquare.Panel.Models"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="VS Code Square"
-        Width="860"
-        Height="560"
-        MinWidth="760"
-        MinHeight="520"
+        Width="640"
+        Height="440"
+        MinWidth="560"
+        MinHeight="380"
         Background="#101211"
         Foreground="#EEF4EF"
         FontFamily="Segoe UI"
-        FontSize="13"
+        FontSize="12"
         WindowStyle="None"
         ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen">
   <shell:WindowChrome.WindowChrome>
-    <shell:WindowChrome CaptionHeight="54"
+    <shell:WindowChrome CaptionHeight="36"
                         ResizeBorderThickness="8"
                         GlassFrameThickness="0"
                         CornerRadius="0"
@@ -26,10 +26,10 @@
   <Window.Resources>
     <SolidColorBrush x:Key="PanelBackgroundBrush" Color="#101211" />
     <SolidColorBrush x:Key="SurfaceBrush" Color="#171B19" />
-    <SolidColorBrush x:Key="SurfaceAltBrush" Color="#202622" />
-    <SolidColorBrush x:Key="BorderBrushSoft" Color="#303A34" />
+    <SolidColorBrush x:Key="SurfaceAltBrush" Color="#1D2420" />
+    <SolidColorBrush x:Key="BorderBrushSoft" Color="#2E3832" />
     <SolidColorBrush x:Key="TextBrush" Color="#EEF4EF" />
-    <SolidColorBrush x:Key="MutedTextBrush" Color="#9DA9A1" />
+    <SolidColorBrush x:Key="MutedTextBrush" Color="#9AA59E" />
     <SolidColorBrush x:Key="AccentBrush" Color="#45D483" />
     <SolidColorBrush x:Key="AccentDarkBrush" Color="#123222" />
 
@@ -38,13 +38,49 @@
       <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
-    <Style x:Key="ActionButton" TargetType="Button">
+    <Style x:Key="InlineTitleTextBox" TargetType="TextBox">
       <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-      <Setter Property="Background" Value="#242B27" />
-      <Setter Property="BorderBrush" Value="#3B463F" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Padding" Value="14,9" />
-      <Setter Property="MinHeight" Value="38" />
+      <Setter Property="Padding" Value="2,1" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}" />
+      <Setter Property="SelectionBrush" Value="{StaticResource AccentBrush}" />
+      <Setter Property="MinHeight" Value="22" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TextBox">
+            <Border x:Name="EditorBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="6">
+              <ScrollViewer x:Name="PART_ContentHost"
+                            Margin="{TemplateBinding Padding}" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                <Setter TargetName="EditorBorder" Property="Background" Value="#202823" />
+                <Setter TargetName="EditorBorder" Property="BorderBrush" Value="#4C6B59" />
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="EditorBorder" Property="BorderBrush" Value="#3A453E" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="BaseButton" TargetType="Button">
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="Background" Value="#202823" />
+      <Setter Property="BorderBrush" Value="#3A453E" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="11,6" />
+      <Setter Property="MinHeight" Value="30" />
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="Template">
         <Setter.Value>
@@ -60,11 +96,11 @@
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="ButtonBorder" Property="Background" Value="#2D3731" />
-                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#5A6B61" />
+                <Setter TargetName="ButtonBorder" Property="Background" Value="#2B352F" />
+                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#53645A" />
               </Trigger>
               <Trigger Property="IsPressed" Value="True">
-                <Setter TargetName="ButtonBorder" Property="Background" Value="#1D241F" />
+                <Setter TargetName="ButtonBorder" Property="Background" Value="#18201B" />
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.45" />
@@ -75,47 +111,56 @@
       </Setter>
     </Style>
 
-    <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource ActionButton}">
+    <Style x:Key="LaunchButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButton}">
       <Setter Property="Foreground" Value="#06120C" />
       <Setter Property="Background" Value="{StaticResource AccentBrush}" />
       <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+      <Setter Property="FontSize" Value="15" />
       <Setter Property="FontWeight" Value="SemiBold" />
-    </Style>
-
-    <Style x:Key="CardFocusButton" TargetType="Button" BasedOn="{StaticResource ActionButton}">
-      <Setter Property="Padding" Value="12,7" />
       <Setter Property="MinHeight" Value="34" />
-      <Setter Property="Background" Value="#1D241F" />
-      <Setter Property="BorderBrush" Value="#405348" />
+      <Setter Property="Padding" Value="10,5" />
     </Style>
 
-    <Style x:Key="TitleBarButton" TargetType="Button">
+    <Style x:Key="MiniButton" TargetType="Button" BasedOn="{StaticResource BaseButton}">
+      <Setter Property="Padding" Value="8,4" />
+      <Setter Property="MinHeight" Value="26" />
+      <Setter Property="MinWidth" Value="54" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="Background" Value="#17201B" />
+      <Setter Property="BorderBrush" Value="#385345" />
+    </Style>
+
+    <Style x:Key="FocusButton" TargetType="Button" BasedOn="{StaticResource MiniButton}">
+      <Setter Property="MinWidth" Value="74" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding IsFocused}" Value="True">
+          <Setter Property="Foreground" Value="#06120C" />
+          <Setter Property="Background" Value="{StaticResource AccentBrush}" />
+          <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+          <Setter Property="FontWeight" Value="SemiBold" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="ChromeButton" TargetType="Button">
       <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
       <Setter Property="Background" Value="Transparent" />
       <Setter Property="BorderBrush" Value="Transparent" />
       <Setter Property="BorderThickness" Value="0" />
-      <Setter Property="Width" Value="36" />
-      <Setter Property="Height" Value="30" />
-      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Width" Value="32" />
+      <Setter Property="Height" Value="28" />
       <Setter Property="Cursor" Value="Hand" />
       <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="ButtonBorder"
-                    Background="{TemplateBinding Background}"
-                    BorderBrush="{TemplateBinding BorderBrush}"
-                    BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="8">
+            <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" CornerRadius="8">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="ButtonBorder" Property="Background" Value="#27302B" />
+                <Setter TargetName="ButtonBorder" Property="Background" Value="#25302A" />
                 <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-              </Trigger>
-              <Trigger Property="IsPressed" Value="True">
-                <Setter TargetName="ButtonBorder" Property="Background" Value="#1E2420" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -123,268 +168,168 @@
       </Setter>
     </Style>
 
-    <Style x:Key="StatusPill" TargetType="Border">
-      <Setter Property="Background" Value="#2A2F2C" />
-      <Setter Property="BorderBrush" Value="#454C47" />
+    <Style x:Key="TinyPill" TargetType="Border">
+      <Setter Property="Background" Value="#242B27" />
+      <Setter Property="BorderBrush" Value="#3A463F" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="8" />
-      <Setter Property="Padding" Value="9,4" />
+      <Setter Property="Padding" Value="6,2" />
     </Style>
 
-    <Style x:Key="WindowStatusPill" TargetType="Border" BasedOn="{StaticResource StatusPill}">
+    <Style x:Key="WindowPill" TargetType="Border" BasedOn="{StaticResource TinyPill}">
       <Style.Triggers>
         <DataTrigger Binding="{Binding WindowStatus}" Value="{x:Static models:SlotWindowStatus.Ready}">
           <Setter Property="Background" Value="{StaticResource AccentDarkBrush}" />
           <Setter Property="BorderBrush" Value="#287B4A" />
         </DataTrigger>
         <DataTrigger Binding="{Binding WindowStatus}" Value="{x:Static models:SlotWindowStatus.Launching}">
-          <Setter Property="Background" Value="#342C17" />
-          <Setter Property="BorderBrush" Value="#8D6A21" />
+          <Setter Property="Background" Value="#302817" />
+          <Setter Property="BorderBrush" Value="#7B6129" />
         </DataTrigger>
         <DataTrigger Binding="{Binding WindowStatus}" Value="{x:Static models:SlotWindowStatus.Missing}">
-          <Setter Property="Background" Value="#351C1A" />
-          <Setter Property="BorderBrush" Value="#81423B" />
+          <Setter Property="Background" Value="#311B1A" />
+          <Setter Property="BorderBrush" Value="#79403A" />
         </DataTrigger>
       </Style.Triggers>
     </Style>
 
-    <Style x:Key="AiStatusPill" TargetType="Border" BasedOn="{StaticResource StatusPill}">
-      <Style.Triggers>
-        <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Running}">
-          <Setter Property="Background" Value="#263112" />
-          <Setter Property="BorderBrush" Value="#7DA83E" />
-        </DataTrigger>
-        <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Completed}">
-          <Setter Property="Background" Value="{StaticResource AccentDarkBrush}" />
-          <Setter Property="BorderBrush" Value="#287B4A" />
-        </DataTrigger>
-        <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Error}">
-          <Setter Property="Background" Value="#351C1A" />
-          <Setter Property="BorderBrush" Value="#81423B" />
-        </DataTrigger>
-        <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.NeedsAttention}">
-          <Setter Property="Background" Value="#342C17" />
-          <Setter Property="BorderBrush" Value="#8D6A21" />
-        </DataTrigger>
-      </Style.Triggers>
-    </Style>
+    <DataTemplate x:Key="SlotCardTemplate" DataType="{x:Type models:WindowSlot}">
+      <Border Background="{StaticResource SurfaceBrush}"
+              BorderBrush="{StaticResource BorderBrushSoft}"
+              BorderThickness="1"
+              CornerRadius="8"
+              Padding="12">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Width="28"
+                    Height="28"
+                    CornerRadius="8"
+                    Background="#223027"
+                    BorderBrush="#335A43"
+                    BorderThickness="1"
+                    Margin="0,0,8,0">
+              <TextBlock Text="{Binding Name}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         FontWeight="SemiBold"
+                         Foreground="{StaticResource AccentBrush}" />
+            </Border>
+            <StackPanel Grid.Column="1">
+              <TextBox Text="{Binding PanelTitle, UpdateSourceTrigger=PropertyChanged}"
+                       ToolTip="タイトルを編集"
+                       Style="{StaticResource InlineTitleTextBox}"
+                       MaxLength="40" />
+              <TextBlock Text="{Binding ShortPath}"
+                         Margin="0,3,0,0"
+                         Foreground="{StaticResource MutedTextBrush}" />
+            </StackPanel>
+          </Grid>
+
+          <WrapPanel Grid.Row="1"
+                     Margin="0,10,0,0"
+                     VerticalAlignment="Top">
+            <Border Style="{StaticResource WindowPill}" Margin="0,0,6,6">
+              <TextBlock Text="{Binding WindowStatusText}" Foreground="{StaticResource TextBrush}" FontWeight="SemiBold" />
+            </Border>
+            <Border Style="{StaticResource TinyPill}" Margin="0,0,6,6">
+              <TextBlock Text="{Binding AiStatusText}" Foreground="{StaticResource MutedTextBrush}" />
+            </Border>
+            <Border Style="{StaticResource TinyPill}" Margin="0,0,6,6">
+              <TextBlock Text="{Binding LastEventText}" Foreground="{StaticResource MutedTextBrush}" />
+            </Border>
+          </WrapPanel>
+
+          <StackPanel Grid.Row="2"
+                      Orientation="Horizontal"
+                      HorizontalAlignment="Right">
+            <Button Content="{Binding FocusButtonText}"
+                    Tag="{Binding}"
+                    Click="FocusSlotButton_Click"
+                    Style="{StaticResource FocusButton}"
+                    Margin="0,0,6,0" />
+            <Button Content="閉じる"
+                    Tag="{Binding}"
+                    Click="CloseSlotButton_Click"
+                    Style="{StaticResource MiniButton}" />
+          </StackPanel>
+        </Grid>
+      </Border>
+    </DataTemplate>
   </Window.Resources>
 
-  <Grid Background="{StaticResource PanelBackgroundBrush}">
+  <Grid Background="{StaticResource PanelBackgroundBrush}" Margin="12">
     <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
+      <RowDefinition Height="30" />
       <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
-    <Border Grid.Row="0"
-            Background="#151917"
-            BorderBrush="{StaticResource BorderBrushSoft}"
-            BorderThickness="0,0,0,1"
-            Padding="22,18">
-      <Grid>
-        <Grid.RowDefinitions>
-          <RowDefinition Height="Auto" />
-          <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+    <Grid Grid.Row="0">
+      <TextBlock Text="VS Code Square"
+                 FontWeight="SemiBold"
+                 Foreground="{StaticResource TextBrush}" />
+      <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">
+        <Button Content="_"
+                ToolTip="最小化"
+                Click="MinimizeButton_Click"
+                Style="{StaticResource ChromeButton}" />
+        <Button Content="X"
+                ToolTip="パネルを閉じる"
+                Click="CloseButton_Click"
+                Style="{StaticResource ChromeButton}"
+                Margin="2,0,0,0" />
+      </StackPanel>
+    </Grid>
 
-        <Grid Grid.Row="0">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-          </Grid.ColumnDefinitions>
-
-          <StackPanel>
-            <TextBlock Text="VS Code Square"
-                       FontSize="22"
-                       FontWeight="SemiBold"
-                       Foreground="{StaticResource TextBrush}" />
-            <TextBlock Text="4つのVS Codeを起動、配置、フォーカス"
-                       Margin="0,4,0,0"
-                       Foreground="{StaticResource MutedTextBrush}" />
-          </StackPanel>
-
-          <StackPanel Grid.Column="1"
-                      Orientation="Horizontal"
-                      VerticalAlignment="Top">
-            <Button Content="_"
-                    ToolTip="Minimize"
-                    Click="MinimizeButton_Click"
-                    Style="{StaticResource TitleBarButton}" />
-            <Button Content="X"
-                    ToolTip="Close"
-                    Click="CloseButton_Click"
-                    Style="{StaticResource TitleBarButton}"
-                    Margin="4,0,0,0" />
-          </StackPanel>
-        </Grid>
-
-        <Grid Grid.Row="1" Margin="0,18,0,0">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
-          </Grid.ColumnDefinitions>
-
-          <StackPanel>
-            <TextBlock Text="Window lanes"
-                       FontSize="12"
-                       FontWeight="SemiBold"
-                       Foreground="{StaticResource AccentBrush}" />
-            <TextBlock Text="{Binding Config.ConfigSource}"
-                       Margin="0,4,0,0"
-                       Foreground="{StaticResource MutedTextBrush}" />
-          </StackPanel>
-
-          <WrapPanel Grid.Column="1"
-                     HorizontalAlignment="Right"
-                     VerticalAlignment="Center"
-                     ItemHeight="40">
-            <Button x:Name="LaunchButton"
-                    Content="Launch 4"
-                    Click="LaunchButton_Click"
-                    Style="{StaticResource PrimaryButton}"
-                    Margin="0,0,8,0" />
-            <Button x:Name="ArrangeButton"
-                    Content="Arrange"
-                    Click="ArrangeButton_Click"
-                    Style="{StaticResource ActionButton}"
-                    Margin="0,0,8,0" />
-            <Button x:Name="FocusAllButton"
-                    Content="Focus All"
-                    Click="FocusAllButton_Click"
-                    Style="{StaticResource ActionButton}"
-                    Margin="0,0,8,0" />
-            <Button Content="Refresh"
-                    Click="RefreshButton_Click"
-                    Style="{StaticResource ActionButton}" />
-          </WrapPanel>
-        </Grid>
-      </Grid>
-    </Border>
-
-    <ScrollViewer Grid.Row="1"
-                  Padding="22"
-                  VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled">
-      <ItemsControl ItemsSource="{Binding Slots}">
-        <ItemsControl.ItemsPanel>
-          <ItemsPanelTemplate>
-            <UniformGrid Columns="2" />
-          </ItemsPanelTemplate>
-        </ItemsControl.ItemsPanel>
-        <ItemsControl.ItemTemplate>
-          <DataTemplate DataType="{x:Type models:WindowSlot}">
-            <Border Background="{StaticResource SurfaceBrush}"
-                    BorderBrush="{StaticResource BorderBrushSoft}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="16"
-                    Margin="0,0,14,14">
-              <Grid>
-                <Grid.RowDefinitions>
-                  <RowDefinition Height="Auto" />
-                  <RowDefinition Height="Auto" />
-                  <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <Grid>
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                  </Grid.ColumnDefinitions>
-
-                  <Border Width="42"
-                          Height="42"
-                          CornerRadius="8"
-                          Background="#232D27"
-                          BorderBrush="#3A5D48"
-                          BorderThickness="1">
-                    <TextBlock Text="{Binding Name}"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               FontSize="18"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource AccentBrush}" />
-                  </Border>
-
-                  <StackPanel Grid.Column="1" Margin="12,0,0,0">
-                    <TextBlock Text="{Binding WindowTitle, TargetNullValue='No window assigned'}"
-                               FontSize="15"
-                               FontWeight="SemiBold"
-                               Foreground="{StaticResource TextBrush}" />
-                    <TextBlock Text="{Binding Path}"
-                               Margin="0,4,0,0"
-                               Foreground="{StaticResource MutedTextBrush}" />
-                  </StackPanel>
-
-                  <Button Grid.Column="2"
-                          Content="Focus"
-                          Tag="{Binding}"
-                          Click="FocusSlotButton_Click"
-                          Style="{StaticResource CardFocusButton}"
-                          Margin="12,0,0,0" />
-                </Grid>
-
-                <WrapPanel Grid.Row="1" Margin="0,16,0,0">
-                  <Border Style="{StaticResource WindowStatusPill}" Margin="0,0,8,8">
-                    <StackPanel Orientation="Horizontal">
-                      <Ellipse Width="7" Height="7" Fill="{StaticResource AccentBrush}" Margin="0,0,7,0" />
-                      <TextBlock Text="{Binding WindowStatus}" Foreground="{StaticResource TextBrush}" FontWeight="SemiBold" />
-                    </StackPanel>
-                  </Border>
-                  <Border Style="{StaticResource AiStatusPill}" Margin="0,0,8,8">
-                    <StackPanel Orientation="Horizontal">
-                      <TextBlock Text="AI" Foreground="{StaticResource MutedTextBrush}" FontWeight="SemiBold" Margin="0,0,7,0" />
-                      <TextBlock Text="{Binding AiStatus}" Foreground="{StaticResource TextBrush}" />
-                    </StackPanel>
-                  </Border>
-                  <Border Style="{StaticResource StatusPill}" Margin="0,0,8,8">
-                    <StackPanel Orientation="Horizontal">
-                      <TextBlock Text="Last" Foreground="{StaticResource MutedTextBrush}" FontWeight="SemiBold" Margin="0,0,7,0" />
-                      <TextBlock Text="{Binding LastEventText}" Foreground="{StaticResource TextBrush}" />
-                    </StackPanel>
-                  </Border>
-                </WrapPanel>
-
-                <Border Grid.Row="2"
-                        Margin="0,6,0,0"
-                        Padding="12"
-                        MinHeight="54"
-                        Background="{StaticResource SurfaceAltBrush}"
-                        BorderBrush="#2C3630"
-                        BorderThickness="1"
-                        CornerRadius="8">
-                  <TextBlock Text="{Binding WindowHandleText, StringFormat=HWND {0}}"
-                             Foreground="{StaticResource MutedTextBrush}" />
-                </Border>
-              </Grid>
-            </Border>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
-    </ScrollViewer>
+    <UniformGrid Grid.Row="1" Columns="2" Rows="2">
+      <ContentControl
+                      Content="{Binding Slots[0]}"
+                      ContentTemplate="{StaticResource SlotCardTemplate}"
+                      Margin="8" />
+      <ContentControl
+                      Content="{Binding Slots[1]}"
+                      ContentTemplate="{StaticResource SlotCardTemplate}"
+                      Margin="8" />
+      <ContentControl
+                      Content="{Binding Slots[2]}"
+                      ContentTemplate="{StaticResource SlotCardTemplate}"
+                      Margin="8" />
+      <ContentControl
+                      Content="{Binding Slots[3]}"
+                      ContentTemplate="{StaticResource SlotCardTemplate}"
+                      Margin="8" />
+    </UniformGrid>
 
     <Border Grid.Row="2"
-            Background="#151917"
+            Background="{StaticResource SurfaceAltBrush}"
             BorderBrush="{StaticResource BorderBrushSoft}"
-            BorderThickness="0,1,0,0"
-            Padding="22,14">
-      <Grid>
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto" />
-          <ColumnDefinition Width="*" />
-        </Grid.ColumnDefinitions>
-        <Ellipse Width="9"
-                 Height="9"
-                 Fill="{StaticResource AccentBrush}"
-                 Margin="0,0,10,0" />
-        <TextBlock Grid.Column="1"
-                   Text="{Binding Message}"
-                   Foreground="{StaticResource MutedTextBrush}"
-                   TextWrapping="Wrap"
-                   TextTrimming="None" />
-      </Grid>
+            BorderThickness="1"
+            CornerRadius="8"
+            Padding="10,7"
+            Margin="8,6,8,8">
+      <TextBlock Text="{Binding Message}"
+                 Foreground="{StaticResource MutedTextBrush}"
+                 FontSize="11"
+                 TextWrapping="NoWrap" />
     </Border>
+
+    <Button Grid.Row="3"
+            x:Name="LaunchButton"
+            Content="Square 4"
+            Click="LaunchButton_Click"
+            Style="{StaticResource LaunchButtonStyle}"
+            HorizontalAlignment="Stretch"
+            Margin="8,0,8,0" />
   </Grid>
 </Window>

@@ -44,11 +44,11 @@ public partial class MainWindow : Window
         {
             if (!_vscodeLauncher.IsCodeCommandAvailable(_statusStore.Config.CodeCommand))
             {
-                _statusStore.Message = $"`{_statusStore.Config.CodeCommand}` was not found. Install VS Code shell command or update config.";
+                _statusStore.Message = $"`{_statusStore.Config.CodeCommand}` が見つかりません。VS Codeのコマンドまたは設定を確認してください。";
                 return;
             }
 
-            _statusStore.Message = "Launching missing VS Code windows...";
+            _statusStore.Message = "未起動のVS Codeを起動しています...";
             var assignments = await _vscodeLauncher.LaunchMissingAsync(
                 _statusStore.Slots,
                 _statusStore.Config,
@@ -64,45 +64,18 @@ public partial class MainWindow : Window
             if (assignments.Count > 0)
             {
                 _windowArranger.Arrange(_statusStore.Slots, _statusStore.Config.Gap);
-                _statusStore.Message = $"Launched and assigned {assignments.Count} VS Code window(s).";
+                _statusStore.ClearFocusedSlot();
+                _statusStore.Message = $"{assignments.Count}個のVS Codeを起動して2x2に配置しました。";
             }
             else
             {
-                _statusStore.Message = "No new VS Code windows were detected. Existing assigned windows were kept.";
+                var arranged = _windowArranger.Arrange(_statusStore.Slots, _statusStore.Config.Gap);
+                _statusStore.ClearFocusedSlot();
+                _statusStore.Message = arranged > 0
+                    ? $"{arranged}個のVS Codeを2x2に配置しました。"
+                    : "新しいVS Codeウィンドウは見つかりませんでした。";
             }
         });
-    }
-
-    private void ArrangeButton_Click(object sender, RoutedEventArgs e)
-    {
-        RefreshSlots();
-        var arranged = _windowArranger.Arrange(_statusStore.Slots, _statusStore.Config.Gap);
-        _statusStore.Message = arranged == 0
-            ? "No assigned VS Code windows are available to arrange."
-            : $"Arranged {arranged} VS Code window(s).";
-    }
-
-    private void FocusAllButton_Click(object sender, RoutedEventArgs e)
-    {
-        RefreshSlots();
-        var focused = 0;
-        foreach (var slot in _statusStore.Slots)
-        {
-            if (_windowArranger.Focus(slot.WindowHandle))
-            {
-                focused++;
-            }
-        }
-
-        _statusStore.Message = focused == 0
-            ? "No assigned VS Code windows are available to focus."
-            : $"Restored {focused} VS Code window(s).";
-    }
-
-    private void RefreshButton_Click(object sender, RoutedEventArgs e)
-    {
-        RefreshSlots();
-        _statusStore.Message = "Window status refreshed.";
     }
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e)
@@ -123,9 +96,42 @@ public partial class MainWindow : Window
         }
 
         RefreshSlots();
-        _statusStore.Message = _windowArranger.Focus(slot.WindowHandle)
-            ? $"Focused slot {slot.Name}."
-            : $"Slot {slot.Name} has no live VS Code window.";
+        if (slot.IsFocused)
+        {
+            var arranged = _windowArranger.Arrange(_statusStore.Slots, _statusStore.Config.Gap);
+            _statusStore.ClearFocusedSlot();
+            _statusStore.Message = arranged == 0
+                ? "4分割表示に戻せるVS Codeウィンドウがありません。"
+                : $"{arranged}個のVS Codeを4分割表示に戻しました。";
+            return;
+        }
+
+        if (_windowArranger.FocusMaximized(slot.WindowHandle))
+        {
+            _statusStore.SetFocusedSlot(slot);
+            _statusStore.Message = $"スロット{slot.Name}をフォーカス表示しました。";
+            return;
+        }
+
+        _statusStore.Message = $"スロット{slot.Name}のVS Codeウィンドウが見つかりません。";
+    }
+
+    private void CloseSlotButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: WindowSlot slot })
+        {
+            return;
+        }
+
+        RefreshSlots();
+        if (_windowArranger.Close(slot.WindowHandle))
+        {
+            _statusStore.ClearWindow(slot);
+            _statusStore.Message = $"スロット{slot.Name}を閉じました。";
+            return;
+        }
+
+        _statusStore.Message = $"スロット{slot.Name}のVS Codeウィンドウが見つかりません。";
     }
 
     private void RefreshSlots()
@@ -157,7 +163,5 @@ public partial class MainWindow : Window
     private void SetBusyState(bool busy)
     {
         LaunchButton.IsEnabled = !busy;
-        ArrangeButton.IsEnabled = !busy;
-        FocusAllButton.IsEnabled = !busy;
     }
 }
