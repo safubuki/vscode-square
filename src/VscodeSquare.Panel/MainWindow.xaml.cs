@@ -12,6 +12,7 @@ namespace VscodeSquare.Panel;
 
 public partial class MainWindow : Window
 {
+    private const int FocusPanelFrontDelayMilliseconds = 500;
     private readonly WindowEnumerator _windowEnumerator = new();
     private readonly WindowArranger _windowArranger = new();
     private readonly VscodeLauncher _vscodeLauncher;
@@ -20,6 +21,10 @@ public partial class MainWindow : Window
     private WindowSlot.SlotWindowLayerMode _managedWindowLayerMode = WindowSlot.SlotWindowLayerMode.Topmost;
     private int? _activeMonitorIndex;
     private bool _isBusy;
+    private CancellationTokenSource? _bringPanelToFrontDelayCts;
+    private double _collapsedWindowHeight;
+    private double _collapsedWindowMinHeight;
+    private StoredPanelSlot? _pendingStoredPanelDeletion;
 
     public MainWindow()
     {
@@ -40,8 +45,11 @@ public partial class MainWindow : Window
         Loaded += (_, _) =>
         {
             Topmost = true;
+            _collapsedWindowHeight = Height;
+            _collapsedWindowMinHeight = MinHeight;
             RefreshSlots();
             ApplyManagedWindowLayers();
+            UpdateWindowHeightForStoredPanels(StoredPanelsExpander.IsExpanded, true);
         };
     }
 
@@ -100,6 +108,7 @@ public partial class MainWindow : Window
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
+        CancelPendingPanelFrontRestore();
         Close();
     }
 
@@ -157,11 +166,13 @@ public partial class MainWindow : Window
     private void ToggleSlotFocus(WindowSlot slot)
     {
         RefreshSlots();
+        CancelPendingPanelFrontRestore();
 
         if (slot.IsFocused)
         {
-            var arranged = ArrangeSlotsOnActiveMonitor();
+            var arranged = ArrangeSlotsOnActiveMonitor(false);
             _statusStore.ClearFocusedSlot();
+            SchedulePanelBringToFront();
             _statusStore.Message = arranged == 0
                 ? "4分割表示に戻せるVS Codeウィンドウがありません。"
                 : $"{arranged}個のVS Codeを4分割表示に戻しました。";
@@ -172,7 +183,7 @@ public partial class MainWindow : Window
         if (_windowArranger.FocusMaximized(slot.WindowHandle))
         {
             _statusStore.SetFocusedSlot(slot);
-            BringPanelToFront();
+            SchedulePanelBringToFront();
             _statusStore.Message = $"スロット{slot.Name}をフォーカス表示しました。";
             return;
         }
@@ -250,21 +261,175 @@ public partial class MainWindow : Window
         _statusStore.Message = $"スロット{slot.Name}のVS Codeウィンドウが見つかりません。";
     }
 
+    private void StoreSlotButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        if (sender is not FrameworkElement { Tag: WindowSlot slot })
+        {
+            return;
+        }
+
+        RefreshSlots();
+        _statusStore.CaptureWorkspacePath(slot);
+
+        if (slot.WindowHandle != IntPtr.Zero && !_windowArranger.Close(slot.WindowHandle))
+        {
+            _statusStore.Message = $"スロット{slot.Name}を裏保存に移す前に VS Code を閉じられませんでした。";
+            return;
+        }
+
+        _statusStore.ClearFocusedSlot();
+        if (!_statusStore.TryStoreSlotInBack(slot, out var storedPanel))
+        {
+            _statusStore.Message = _statusStore.StoredPanels.All(item => item.HasContent)
+                ? "裏保存 Quartet が満杯のため保存できません。"
+                : $"スロット{slot.Name}に裏保存できるワークスペースがありません。";
+            return;
+        }
+
+        ArrangeSlotsOnActiveMonitor();
+        _statusStore.Message = $"スロット{slot.Name}を{storedPanel!.Label}へ裏保存しました。";
+    }
+
+    private async void ShowStoredPanelButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        if (sender is not Button { Tag: StoredPanelSlot storedPanel, CommandParameter: string targetSlotName })
+        {
+            return;
+        }
+
+        if (!storedPanel.HasContent)
+        {
+            _statusStore.Message = $"{storedPanel.Label} は空です。";
+            return;
+        }
+
+        var targetSlot = _statusStore.FindSlot(targetSlotName);
+        if (targetSlot is null)
+        {
+            return;
+        }
+
+        await RunBusyAsync(async () =>
+        {
+            RefreshSlots();
+            _statusStore.CaptureWorkspacePath(targetSlot);
+
+            if (targetSlot.WindowHandle != IntPtr.Zero && !_windowArranger.Close(targetSlot.WindowHandle))
+            {
+                _statusStore.Message = $"スロット{targetSlot.Name}の現在の VS Code を閉じられないため入れ替えできません。";
+                return;
+            }
+
+            _statusStore.ClearFocusedSlot();
+            if (!_statusStore.TryShowStoredPanel(storedPanel, targetSlot, out var swappedVisiblePanel))
+            {
+                _statusStore.Message = $"{storedPanel.Label} をスロット{targetSlot.Name}へ表示できませんでした。";
+                return;
+            }
+
+            var assignments = await _vscodeLauncher.LaunchMissingAsync(
+                new[] { targetSlot },
+                _statusStore.Config,
+                CancellationToken.None);
+
+            foreach (var assignment in assignments)
+            {
+                _statusStore.AssignWindow(assignment.Slot, assignment.Window);
+            }
+
+            RefreshSlots();
+            ArrangeSlotsOnActiveMonitor();
+            _statusStore.Message = assignments.Count > 0
+                ? swappedVisiblePanel
+                    ? $"{storedPanel.Label}をスロット{targetSlot.Name}へ表示し、元の内容は裏保存に戻しました。"
+                    : $"{storedPanel.Label}をスロット{targetSlot.Name}へ表示しました。"
+                : $"{storedPanel.Label}の設定をスロット{targetSlot.Name}へ移しましたが、VS Code ウィンドウの起動は確認できませんでした。";
+        });
+    }
+
+    private void DeleteStoredPanelButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        if (sender is not Button { Tag: StoredPanelSlot storedPanel } || !storedPanel.HasContent)
+        {
+            return;
+        }
+
+        _pendingStoredPanelDeletion = storedPanel;
+        DeleteStoredPanelMessageText.Text = $"{storedPanel.Label} の保存内容を削除して空きスロットに戻します。";
+
+        var detail = string.IsNullOrWhiteSpace(storedPanel.PanelTitle)
+            ? storedPanel.ShortPath
+            : storedPanel.PanelTitle;
+        DeleteStoredPanelDetailText.Text = string.IsNullOrWhiteSpace(detail) || detail == "-"
+            ? "この操作は取り消せません。"
+            : detail;
+        DeleteStoredPanelPathText.Text = string.IsNullOrWhiteSpace(storedPanel.WorkspacePath)
+            ? "保存済みパスはありません。"
+            : storedPanel.WorkspacePath;
+
+        DeleteStoredPanelOverlay.Visibility = Visibility.Visible;
+        Dispatcher.BeginInvoke(() => CancelDeleteStoredPanelButton.Focus(), DispatcherPriority.Input);
+    }
+
+    private void ConfirmDeleteStoredPanelButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pendingStoredPanelDeletion is null)
+        {
+            HideDeleteStoredPanelDialog();
+            return;
+        }
+
+        var label = _pendingStoredPanelDeletion.Label;
+        _statusStore.ClearStoredPanel(_pendingStoredPanelDeletion);
+        _statusStore.Message = $"{label} を空きスロットに戻しました。";
+        HideDeleteStoredPanelDialog();
+    }
+
+    private void CancelDeleteStoredPanelButton_Click(object sender, RoutedEventArgs e)
+    {
+        HideDeleteStoredPanelDialog();
+    }
+
+    private void StoredPanelsExpander_Expanded(object sender, RoutedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(() => UpdateWindowHeightForStoredPanels(true), DispatcherPriority.Loaded);
+    }
+
+    private void StoredPanelsExpander_Collapsed(object sender, RoutedEventArgs e)
+    {
+        Dispatcher.BeginInvoke(() => UpdateWindowHeightForStoredPanels(false), DispatcherPriority.Loaded);
+    }
+
     private void RefreshSlots()
     {
         _statusStore.RefreshWindowStatuses(_windowEnumerator);
     }
 
-    private int ArrangeSlotsOnActiveMonitor()
+    private int ArrangeSlotsOnActiveMonitor(bool bringPanelAfterArrange = true)
     {
         var arranged = _windowArranger.Arrange(_statusStore.Slots, _statusStore.Config.Gap, GetActiveMonitorIndex());
-        ApplyManagedWindowLayers();
+        ApplyManagedWindowLayers(bringPanelAfterArrange);
         return arranged;
     }
 
-    private void ApplyManagedWindowLayers()
+    private void ApplyManagedWindowLayers(bool bringPanelAfterChange = true)
     {
-        SetManagedWindowLayer(_managedWindowLayerMode);
+        SetManagedWindowLayer(_managedWindowLayerMode, bringPanelAfterChange);
     }
 
     private bool SetManagedWindowLayer(WindowSlot.SlotWindowLayerMode layerMode, bool bringPanelAfterChange = true)
@@ -325,6 +490,88 @@ public partial class MainWindow : Window
         _windowArranger.BringToFront(panelHandle);
     }
 
+    private void SchedulePanelBringToFront()
+    {
+        CancelPendingPanelFrontRestore();
+
+        var cts = new CancellationTokenSource();
+        _bringPanelToFrontDelayCts = cts;
+        _ = RestorePanelToFrontAfterDelayAsync(cts.Token);
+    }
+
+    private async Task RestorePanelToFrontAfterDelayAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(FocusPanelFrontDelayMilliseconds, cancellationToken);
+            if (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+
+            BringPanelToFront();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void CancelPendingPanelFrontRestore()
+    {
+        if (_bringPanelToFrontDelayCts is null)
+        {
+            return;
+        }
+
+        _bringPanelToFrontDelayCts.Cancel();
+        _bringPanelToFrontDelayCts.Dispose();
+        _bringPanelToFrontDelayCts = null;
+    }
+
+    private void HideDeleteStoredPanelDialog()
+    {
+        _pendingStoredPanelDeletion = null;
+        DeleteStoredPanelOverlay.Visibility = Visibility.Collapsed;
+    }
+
+    private void UpdateWindowHeightForStoredPanels(bool isExpanded, bool force = false)
+    {
+        if (_collapsedWindowHeight <= 0)
+        {
+            _collapsedWindowHeight = Height;
+        }
+
+        if (_collapsedWindowMinHeight <= 0)
+        {
+            _collapsedWindowMinHeight = MinHeight;
+        }
+
+        if (!isExpanded)
+        {
+            MinHeight = _collapsedWindowMinHeight;
+            if (force || Height > _collapsedWindowHeight)
+            {
+                Height = _collapsedWindowHeight;
+            }
+
+            return;
+        }
+
+        StoredPanelsExpanderContent.UpdateLayout();
+        var extraHeight = StoredPanelsExpanderContent.ActualHeight;
+        if (extraHeight <= 0)
+        {
+            extraHeight = StoredPanelsExpanderContent.DesiredSize.Height;
+        }
+
+        extraHeight = Math.Max(0, extraHeight + 12);
+        var targetHeight = _collapsedWindowHeight + extraHeight;
+        var targetMinHeight = _collapsedWindowMinHeight + extraHeight;
+
+        Height = targetHeight;
+        MinHeight = targetMinHeight;
+    }
+
     private static bool IsInteractiveCardChild(DependencyObject? source)
     {
         while (source is not null)
@@ -359,6 +606,18 @@ public partial class MainWindow : Window
 
         _activeMonitorIndex = _windowArranger.GetDefaultMonitorIndex(_statusStore.Config.Monitor);
         return _activeMonitorIndex.Value;
+    }
+
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        if (DeleteStoredPanelOverlay.Visibility == Visibility.Visible && e.Key == Key.Escape)
+        {
+            HideDeleteStoredPanelDialog();
+            e.Handled = true;
+            return;
+        }
+
+        base.OnPreviewKeyDown(e);
     }
 
     private async Task RunBusyAsync(Func<Task> action)

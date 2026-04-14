@@ -12,6 +12,7 @@ public sealed class WindowSlot : INotifyPropertyChanged
     }
 
     private IntPtr _windowHandle;
+    private string _path = string.Empty;
     private string _panelTitle;
     private string _savedWorkspacePath = string.Empty;
     private bool _savedWorkspaceConfirmed;
@@ -26,7 +27,7 @@ public sealed class WindowSlot : INotifyPropertyChanged
     public WindowSlot(SlotConfig config)
     {
         Name = config.Name;
-        Path = config.Path;
+        _path = NormalizeWorkspacePath(config.Path);
         _panelTitle = GetDefaultPanelTitle();
     }
 
@@ -34,7 +35,20 @@ public sealed class WindowSlot : INotifyPropertyChanged
 
     public string Name { get; }
 
-    public string Path { get; }
+    public string Path
+    {
+        get => _path;
+        set
+        {
+            if (SetField(ref _path, NormalizeWorkspacePath(value)))
+            {
+                OnPropertyChanged(nameof(EffectivePath));
+                OnPropertyChanged(nameof(DisplayPath));
+                OnPropertyChanged(nameof(ShortPath));
+                OnPropertyChanged(nameof(HasPanelContent));
+            }
+        }
+    }
 
     public string EffectivePath => SavedWorkspaceConfirmed && !string.IsNullOrWhiteSpace(SavedWorkspacePath) ? SavedWorkspacePath : Path;
 
@@ -75,11 +89,14 @@ public sealed class WindowSlot : INotifyPropertyChanged
             if (SetField(ref _panelTitle, normalizedValue))
             {
                 OnPropertyChanged(nameof(DisplayTitle));
+                OnPropertyChanged(nameof(HasPanelContent));
             }
         }
     }
 
     public string DisplayTitle => string.IsNullOrWhiteSpace(PanelTitle) ? GetDefaultPanelTitle() : PanelTitle;
+
+    public string DefaultPanelTitle => GetDefaultPanelTitle();
 
     public string SavedWorkspacePath
     {
@@ -91,6 +108,7 @@ public sealed class WindowSlot : INotifyPropertyChanged
                 OnPropertyChanged(nameof(EffectivePath));
                 OnPropertyChanged(nameof(DisplayPath));
                 OnPropertyChanged(nameof(ShortPath));
+                OnPropertyChanged(nameof(HasPanelContent));
             }
         }
     }
@@ -105,6 +123,7 @@ public sealed class WindowSlot : INotifyPropertyChanged
                 OnPropertyChanged(nameof(EffectivePath));
                 OnPropertyChanged(nameof(DisplayPath));
                 OnPropertyChanged(nameof(ShortPath));
+                OnPropertyChanged(nameof(HasPanelContent));
             }
         }
     }
@@ -118,6 +137,7 @@ public sealed class WindowSlot : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(DisplayPath));
                 OnPropertyChanged(nameof(ShortPath));
+                OnPropertyChanged(nameof(HasPanelContent));
             }
         }
     }
@@ -168,6 +188,12 @@ public sealed class WindowSlot : INotifyPropertyChanged
         _ => $"AI {AiStatus}"
     };
 
+    public bool HasPanelContent => WindowHandle != IntPtr.Zero
+        || !string.IsNullOrWhiteSpace(PanelTitle)
+        || !string.IsNullOrWhiteSpace(CurrentWorkspacePath)
+        || !string.IsNullOrWhiteSpace(SavedWorkspacePath)
+        || !string.IsNullOrWhiteSpace(Path);
+
     public IntPtr WindowHandle
     {
         get => _windowHandle;
@@ -183,6 +209,7 @@ public sealed class WindowSlot : INotifyPropertyChanged
             OnPropertyChanged(nameof(DisplayPath));
             OnPropertyChanged(nameof(WindowHandleText));
             OnPropertyChanged(nameof(ShortPath));
+            OnPropertyChanged(nameof(HasPanelContent));
         }
     }
 
@@ -240,6 +267,25 @@ public sealed class WindowSlot : INotifyPropertyChanged
         WindowStatus = SlotWindowStatus.Missing;
         IsFocused = false;
         WindowLayerMode = SlotWindowLayerMode.Topmost;
+    }
+
+    public void ApplyAssignedPanel(string? panelTitle, string? workspacePath)
+    {
+        var normalizedPath = NormalizeWorkspacePath(workspacePath);
+        PanelTitle = panelTitle ?? string.Empty;
+        Path = normalizedPath;
+        SavedWorkspacePath = normalizedPath;
+        SavedWorkspaceConfirmed = !string.IsNullOrWhiteSpace(normalizedPath);
+        CurrentWorkspacePath = string.Empty;
+    }
+
+    public void ClearAssignedPanel()
+    {
+        PanelTitle = string.Empty;
+        Path = string.Empty;
+        SavedWorkspacePath = string.Empty;
+        SavedWorkspaceConfirmed = false;
+        CurrentWorkspacePath = string.Empty;
     }
 
     private string GetDefaultPanelTitle()

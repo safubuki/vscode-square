@@ -9,17 +9,34 @@ namespace VscodeSquare.Panel.Services;
 
 public sealed class StatusStore : INotifyPropertyChanged
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true
+    };
+
+    private readonly record struct PanelSnapshot(string PanelTitle, string WorkspacePath)
+    {
+        public bool HasContent => !string.IsNullOrWhiteSpace(PanelTitle) || !string.IsNullOrWhiteSpace(WorkspacePath);
+    }
+
     private string _message;
+    private bool _suppressPersistence;
 
     public StatusStore(AppConfig config)
     {
         Config = config;
         Slots = new ObservableCollection<WindowSlot>(config.Slots.Select(slot => new WindowSlot(slot)));
-        LoadSavedSlotStates();
+        StoredPanels = new ObservableCollection<StoredPanelSlot>(Enumerable.Range(1, 4).Select(index => new StoredPanelSlot(index)));
+        LoadSavedPanelStates();
         foreach (var slot in Slots)
         {
             slot.PropertyChanged += Slot_PropertyChanged;
+        }
+
+        foreach (var storedPanel in StoredPanels)
+        {
+            storedPanel.PropertyChanged += StoredPanel_PropertyChanged;
         }
 
         _message = $"設定を読み込みました: {config.ConfigSource}";
@@ -30,6 +47,8 @@ public sealed class StatusStore : INotifyPropertyChanged
     public AppConfig Config { get; }
 
     public ObservableCollection<WindowSlot> Slots { get; }
+
+    public ObservableCollection<StoredPanelSlot> StoredPanels { get; }
 
     public string Message
     {
@@ -55,13 +74,22 @@ public sealed class StatusStore : INotifyPropertyChanged
         slot.WindowStatus = SlotWindowStatus.Ready;
         slot.LastEventAt = DateTimeOffset.Now;
         slot.WindowLayerMode = WindowSlot.SlotWindowLayerMode.Topmost;
-        SaveSlotStates();
+
+        if (ShouldAutoAssignWorkspaceTitle(slot))
+        {
+            var preferredTitle = !string.IsNullOrWhiteSpace(slot.Path)
+                ? GetBaseTitleFromWorkspacePath(slot.Path)
+                : $"スロット{slot.Name}";
+            slot.PanelTitle = MakeUniquePanelTitle(preferredTitle, slot);
+        }
+
+        SavePanelStates();
     }
 
     public void ClearWindow(WindowSlot slot)
     {
         slot.ClearWindow();
-        SaveSlotStates();
+        SavePanelStates();
     }
 
     public void SetFocusedSlot(WindowSlot focusedSlot)
@@ -87,7 +115,7 @@ public sealed class StatusStore : INotifyPropertyChanged
             CaptureWorkspacePath(slot);
         }
 
-        SaveSlotStates();
+        SavePanelStates();
     }
 
     public void CaptureWorkspacePath(WindowSlot slot)
@@ -101,8 +129,15 @@ public sealed class StatusStore : INotifyPropertyChanged
         slot.CurrentWorkspacePath = workspacePath ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(workspacePath))
         {
+            slot.Path = workspacePath;
             slot.SavedWorkspacePath = workspacePath;
             slot.SavedWorkspaceConfirmed = true;
+
+            if (ShouldAutoAssignWorkspaceTitle(slot))
+            {
+                slot.PanelTitle = MakeUniquePanelTitle(GetBaseTitleFromWorkspacePath(workspacePath), slot);
+            }
+
             return;
         }
 
@@ -112,12 +147,94 @@ public sealed class StatusStore : INotifyPropertyChanged
 
     public void LoadSavedSettings()
     {
-        LoadSavedSlotStates();
+        LoadSavedPanelStates();
     }
 
     public void SaveCurrentSettings()
     {
         CaptureWorkspacePaths();
+    }
+
+    public WindowSlot? FindSlot(string slotName)
+    {
+        return Slots.FirstOrDefault(slot => string.Equals(slot.Name, slotName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    public bool TryStoreSlotInBack(WindowSlot slot, out StoredPanelSlot? storedPanel)
+    {
+        storedPanel = StoredPanels.FirstOrDefault(item => !item.HasContent);
+        if (storedPanel is null)
+        {
+            return false;
+        }
+
+        var snapshot = CreateSnapshot(slot);
+        if (!snapshot.HasContent)
+        {
+            storedPanel = null;
+            return false;
+        }
+
+        storedPanel.LoadFrom(snapshot.PanelTitle, snapshot.WorkspacePath);
+        slot.ClearAssignedPanel();
+        slot.ClearWindow();
+        SavePanelStates();
+        return true;
+    }
+
+    public bool TryShowStoredPanel(StoredPanelSlot storedPanel, WindowSlot targetSlot, out bool swappedVisiblePanel)
+    {
+        swappedVisiblePanel = false;
+
+        var storedSnapshot = CreateSnapshot(storedPanel);
+        if (!storedSnapshot.HasContent)
+        {
+            return false;
+        }
+
+        var visibleSnapshot = CreateSnapshot(targetSlot);
+
+        if (visibleSnapshot.HasContent)
+        {
+            storedPanel.LoadFrom(visibleSnapshot.PanelTitle, visibleSnapshot.WorkspacePath);
+            swappedVisiblePanel = true;
+        }
+        else
+        {
+            storedPanel.Clear();
+        }
+
+        targetSlot.ClearWindow();
+        targetSlot.ApplyAssignedPanel(storedSnapshot.PanelTitle, storedSnapshot.WorkspacePath);
+        if (ShouldAutoAssignWorkspaceTitle(targetSlot))
+        {
+            var preferredTitle = !string.IsNullOrWhiteSpace(storedSnapshot.PanelTitle)
+                ? storedSnapshot.PanelTitle
+                : !string.IsNullOrWhiteSpace(storedSnapshot.WorkspacePath)
+                    ? GetBaseTitleFromWorkspacePath(storedSnapshot.WorkspacePath)
+                    : $"スロット{targetSlot.Name}";
+
+            targetSlot.PanelTitle = MakeUniquePanelTitle(preferredTitle, targetSlot);
+        }
+
+        SavePanelStates();
+        return true;
+    }
+
+    public void ClearStoredPanel(StoredPanelSlot storedPanel)
+    {
+        _suppressPersistence = true;
+
+        try
+        {
+            storedPanel.Clear();
+        }
+        finally
+        {
+            _suppressPersistence = false;
+        }
+
+        SavePanelStates();
     }
 
     public void RefreshWindowStatuses(WindowEnumerator windowEnumerator)
@@ -144,7 +261,7 @@ public sealed class StatusStore : INotifyPropertyChanged
         }
     }
 
-    private void LoadSavedSlotStates()
+    private void LoadSavedPanelStates()
     {
         var statePath = GetStatePath();
         if (!File.Exists(statePath))
@@ -154,56 +271,68 @@ public sealed class StatusStore : INotifyPropertyChanged
 
         try
         {
-            var states = JsonSerializer.Deserialize<List<SavedSlotState>>(File.ReadAllText(statePath)) ?? [];
-            foreach (var state in states)
+            _suppressPersistence = true;
+            var json = File.ReadAllText(statePath);
+            if (string.IsNullOrWhiteSpace(json))
             {
-                var slot = Slots.FirstOrDefault(item => string.Equals(item.Name, state.Name, StringComparison.OrdinalIgnoreCase));
-                if (slot is null)
-                {
-                    continue;
-                }
-
-                if (!string.IsNullOrWhiteSpace(state.PanelTitle))
-                {
-                    slot.PanelTitle = state.PanelTitle;
-                }
-
-                if (!string.IsNullOrWhiteSpace(state.SavedWorkspacePath))
-                {
-                    slot.SavedWorkspacePath = state.SavedWorkspacePath;
-                }
-
-                slot.SavedWorkspaceConfirmed = state.SavedWorkspaceConfirmed;
-
-                if (state.WindowHandle != 0)
-                {
-                    slot.WindowHandle = new IntPtr(state.WindowHandle);
-                }
+                return;
             }
+
+            if (json.TrimStart().StartsWith("[", StringComparison.Ordinal))
+            {
+                var legacyStates = JsonSerializer.Deserialize<List<SavedSlotState>>(json, JsonOptions) ?? [];
+                ApplyVisibleStates(legacyStates);
+                return;
+            }
+
+            var stateDocument = JsonSerializer.Deserialize<SavedPanelStateDocument>(json, JsonOptions) ?? new SavedPanelStateDocument();
+            ApplyVisibleStates(stateDocument.VisibleSlots);
+            ApplyStoredStates(stateDocument.StoredPanels);
         }
         catch (Exception ex)
         {
             DiagnosticLog.Write(ex);
         }
+        finally
+        {
+            _suppressPersistence = false;
+        }
     }
 
-    private void SaveSlotStates()
+    private void SavePanelStates()
     {
+        if (_suppressPersistence)
+        {
+            return;
+        }
+
         try
         {
             Directory.CreateDirectory(Config.StateDirectory);
-            var states = Slots
-                .Select(slot => new SavedSlotState
-                {
-                    Name = slot.Name,
-                    PanelTitle = slot.PanelTitle,
-                    SavedWorkspacePath = slot.SavedWorkspacePath,
-                    SavedWorkspaceConfirmed = slot.SavedWorkspaceConfirmed,
-                    WindowHandle = slot.WindowHandle.ToInt64()
-                })
-                .ToList();
+            var document = new SavedPanelStateDocument
+            {
+                VisibleSlots = Slots
+                    .Select(slot => new SavedSlotState
+                    {
+                        Name = slot.Name,
+                        PanelTitle = slot.PanelTitle,
+                        AssignedPath = slot.Path,
+                        SavedWorkspacePath = slot.SavedWorkspacePath,
+                        SavedWorkspaceConfirmed = slot.SavedWorkspaceConfirmed,
+                        WindowHandle = slot.WindowHandle.ToInt64()
+                    })
+                    .ToList(),
+                StoredPanels = StoredPanels
+                    .Select(slot => new SavedStoredPanelState
+                    {
+                        Index = slot.Index,
+                        PanelTitle = slot.PanelTitle,
+                        WorkspacePath = slot.WorkspacePath
+                    })
+                    .ToList()
+            };
 
-            File.WriteAllText(GetStatePath(), JsonSerializer.Serialize(states, JsonOptions));
+            File.WriteAllText(GetStatePath(), JsonSerializer.Serialize(document, JsonOptions));
         }
         catch (Exception ex)
         {
@@ -216,11 +345,200 @@ public sealed class StatusStore : INotifyPropertyChanged
         return Path.Combine(Config.StateDirectory, "slots.json");
     }
 
+    private void ApplyVisibleStates(IEnumerable<SavedSlotState> states)
+    {
+        foreach (var slot in Slots)
+        {
+            slot.PanelTitle = string.Empty;
+            slot.Path = string.Empty;
+            slot.SavedWorkspacePath = string.Empty;
+            slot.SavedWorkspaceConfirmed = false;
+            slot.WindowHandle = IntPtr.Zero;
+            slot.CurrentWorkspacePath = string.Empty;
+            slot.WindowTitle = string.Empty;
+            slot.WindowStatus = SlotWindowStatus.Missing;
+        }
+
+        foreach (var state in states)
+        {
+            var slot = Slots.FirstOrDefault(item => string.Equals(item.Name, state.Name, StringComparison.OrdinalIgnoreCase));
+            if (slot is null)
+            {
+                continue;
+            }
+
+            slot.PanelTitle = state.PanelTitle ?? string.Empty;
+
+            if (!string.IsNullOrWhiteSpace(state.AssignedPath))
+            {
+                slot.Path = state.AssignedPath;
+            }
+
+            if (!string.IsNullOrWhiteSpace(state.SavedWorkspacePath))
+            {
+                slot.SavedWorkspacePath = state.SavedWorkspacePath;
+            }
+
+            slot.SavedWorkspaceConfirmed = state.SavedWorkspaceConfirmed;
+
+            if (state.WindowHandle != 0)
+            {
+                slot.WindowHandle = new IntPtr(state.WindowHandle);
+            }
+        }
+    }
+
+    private void ApplyStoredStates(IEnumerable<SavedStoredPanelState> states)
+    {
+        foreach (var storedPanel in StoredPanels)
+        {
+            storedPanel.Clear();
+        }
+
+        foreach (var state in states)
+        {
+            var storedPanel = StoredPanels.FirstOrDefault(item => item.Index == state.Index);
+            storedPanel?.LoadFrom(state.PanelTitle, state.WorkspacePath);
+        }
+    }
+
+    private static PanelSnapshot CreateSnapshot(WindowSlot slot)
+    {
+        var workspacePath = slot.CurrentWorkspacePath;
+        if (string.IsNullOrWhiteSpace(workspacePath))
+        {
+            workspacePath = slot.SavedWorkspaceConfirmed && !string.IsNullOrWhiteSpace(slot.SavedWorkspacePath)
+                ? slot.SavedWorkspacePath
+                : slot.Path;
+        }
+
+        var panelTitle = IsMeaningfulPanelTitle(slot)
+            || (slot.WindowHandle != IntPtr.Zero && !string.IsNullOrWhiteSpace(slot.PanelTitle))
+                ? slot.PanelTitle
+                : string.Empty;
+            return new PanelSnapshot(panelTitle, workspacePath);
+    }
+
+    private static PanelSnapshot CreateSnapshot(StoredPanelSlot slot)
+    {
+        return new PanelSnapshot(slot.PanelTitle, slot.WorkspacePath);
+    }
+
+    private string MakeUniquePanelTitle(string desiredTitle, params object?[] excludedItems)
+    {
+        var baseTitle = string.IsNullOrWhiteSpace(desiredTitle) ? "スロット" : desiredTitle.Trim();
+        var usedTitles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var slot in Slots)
+        {
+            if (excludedItems.Any(item => ReferenceEquals(item, slot)) || string.IsNullOrWhiteSpace(slot.PanelTitle))
+            {
+                continue;
+            }
+
+            usedTitles.Add(slot.PanelTitle.Trim());
+        }
+
+        foreach (var storedPanel in StoredPanels)
+        {
+            if (excludedItems.Any(item => ReferenceEquals(item, storedPanel)) || string.IsNullOrWhiteSpace(storedPanel.PanelTitle))
+            {
+                continue;
+            }
+
+            usedTitles.Add(storedPanel.PanelTitle.Trim());
+        }
+
+        if (!usedTitles.Contains(baseTitle))
+        {
+            return baseTitle;
+        }
+
+        for (var index = 1; ; index++)
+        {
+            var candidate = $"{baseTitle}({index})";
+            if (!usedTitles.Contains(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    private static string GetBaseTitleFromWorkspacePath(string workspacePath)
+    {
+        var trimmed = workspacePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fileName = Path.GetFileName(trimmed);
+        return string.IsNullOrWhiteSpace(fileName) ? "スロット" : fileName;
+    }
+
+    private static bool IsMeaningfulPanelTitle(WindowSlot slot)
+    {
+        return !string.IsNullOrWhiteSpace(slot.PanelTitle)
+            && !string.Equals(slot.PanelTitle.Trim(), slot.DefaultPanelTitle, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool ShouldAutoAssignWorkspaceTitle(WindowSlot slot)
+    {
+        return string.IsNullOrWhiteSpace(slot.PanelTitle)
+            || string.Equals(slot.PanelTitle.Trim(), slot.DefaultPanelTitle, StringComparison.OrdinalIgnoreCase)
+            || IsGeneratedLaunchTitle(slot.PanelTitle, slot.Name);
+    }
+
+    private static bool IsGeneratedLaunchTitle(string? title, string slotName)
+    {
+        return IsCopyTitleOf(title, $"スロット{slotName}");
+    }
+
+    private static bool IsCopyTitleOf(string? title, string baseTitle)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return false;
+        }
+
+        var normalized = title.Trim();
+        if (string.Equals(normalized, baseTitle, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!normalized.StartsWith(baseTitle, StringComparison.OrdinalIgnoreCase)
+            || normalized.Length <= baseTitle.Length + 2
+            || normalized[baseTitle.Length] != '('
+            || normalized[^1] != ')')
+        {
+            return false;
+        }
+
+        return int.TryParse(normalized.AsSpan(baseTitle.Length + 1, normalized.Length - baseTitle.Length - 2), out _);
+    }
+
     private void Slot_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName is nameof(WindowSlot.PanelTitle) or nameof(WindowSlot.SavedWorkspacePath) or nameof(WindowSlot.SavedWorkspaceConfirmed))
+        if (_suppressPersistence)
         {
-            SaveSlotStates();
+            return;
+        }
+
+        if (e.PropertyName is nameof(WindowSlot.PanelTitle)
+            or nameof(WindowSlot.Path)
+            or nameof(WindowSlot.SavedWorkspacePath)
+            or nameof(WindowSlot.SavedWorkspaceConfirmed))
+        {
+            SavePanelStates();
+        }
+    }
+
+    private void StoredPanel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_suppressPersistence)
+        {
+            return;
+        }
+
+        if (e.PropertyName is nameof(StoredPanelSlot.PanelTitle) or nameof(StoredPanelSlot.WorkspacePath))
+        {
+            SavePanelStates();
         }
     }
 

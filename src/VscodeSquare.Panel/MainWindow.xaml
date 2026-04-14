@@ -5,9 +5,9 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="Turtle App Launch Quartet"
         Width="600"
-        Height="344"
+        Height="376"
         MinWidth="524"
-        MinHeight="312"
+        MinHeight="336"
         Background="#101211"
         Foreground="#EEF4EF"
         FontFamily="Segoe UI"
@@ -148,6 +148,40 @@
       <Setter Property="MinWidth" Value="58" />
     </Style>
 
+    <Style x:Key="StoredAssignButton" TargetType="Button" BasedOn="{StaticResource MiniButton}">
+      <Setter Property="MinHeight" Value="22" />
+      <Setter Property="MinWidth" Value="24" />
+      <Setter Property="Padding" Value="4,2" />
+      <Setter Property="FontSize" Value="10" />
+    </Style>
+
+    <Style x:Key="StoredDeleteButton" TargetType="Button" BasedOn="{StaticResource StoredAssignButton}">
+      <Setter Property="MinWidth" Value="24" />
+      <Setter Property="Width" Value="24" />
+      <Setter Property="Height" Value="24" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Foreground" Value="#F2B7AF" />
+      <Setter Property="Background" Value="#261816" />
+      <Setter Property="BorderBrush" Value="#6A3832" />
+      <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="ToolTip" Value="この裏保存を削除" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding HasContent}" Value="False">
+          <Setter Property="Visibility" Value="Collapsed" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButton}">
+      <Setter Property="Foreground" Value="#FFF4F2" />
+      <Setter Property="Background" Value="#6F2D27" />
+      <Setter Property="BorderBrush" Value="#B3574E" />
+      <Setter Property="MinWidth" Value="96" />
+      <Setter Property="MinHeight" Value="32" />
+      <Setter Property="Padding" Value="12,6" />
+    </Style>
+
     <Style x:Key="ChromeButton" TargetType="Button">
       <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
       <Setter Property="Background" Value="Transparent" />
@@ -246,6 +280,19 @@
       </Style.Triggers>
     </Style>
 
+    <Style x:Key="StoredCardBorderStyle" TargetType="Border">
+      <Setter Property="Background" Value="{StaticResource SurfaceAltBrush}" />
+      <Setter Property="BorderBrush" Value="{StaticResource BorderBrushSoft}" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="6" />
+    </Style>
+
+    <Style x:Key="StoredPanelsExpanderStyle" TargetType="Expander">
+      <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+      <Setter Property="FontSize" Value="10" />
+    </Style>
+
     <Style x:Key="LedIndicatorStyle" TargetType="Ellipse">
       <Setter Property="Width" Value="10" />
       <Setter Property="Height" Value="10" />
@@ -335,13 +382,126 @@
               </Border>
             </WrapPanel>
 
-            <Button Grid.Column="1"
-                    Content="停止"
+            <StackPanel Grid.Column="1"
+                        Orientation="Horizontal"
+                        VerticalAlignment="Center">
+              <Button Content="裏へ"
+                      Tag="{Binding}"
+                      Click="StoreSlotButton_Click"
+                      Style="{StaticResource SlotActionButton}"
+                      Margin="8,0,6,0" />
+              <Button Content="停止"
+                      Tag="{Binding}"
+                      Click="CloseSlotButton_Click"
+                      Style="{StaticResource SlotActionButton}" />
+            </StackPanel>
+          </Grid>
+        </Grid>
+      </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="StoredPanelTemplate" DataType="{x:Type models:StoredPanelSlot}">
+      <Border Style="{StaticResource StoredCardBorderStyle}">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <Border Width="28"
+                    Height="20"
+                    CornerRadius="6"
+                    Background="#223027"
+                    BorderBrush="#335A43"
+                    BorderThickness="1"
+                    Margin="0,0,8,0">
+              <TextBlock Text="{Binding Label}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         FontSize="10"
+                         FontWeight="SemiBold"
+                         Foreground="{StaticResource AccentBrush}" />
+            </Border>
+
+            <TextBlock Grid.Column="1"
+                       Text="{Binding DisplayTitle}"
+                     Margin="0,0,6,0"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center" />
+
+                <Button Grid.Column="2"
+                  Content="&#xE74D;"
+                  Tag="{Binding}"
+                  Click="DeleteStoredPanelButton_Click"
+                  Style="{StaticResource StoredDeleteButton}"
+                  VerticalAlignment="Top"
+                  IsEnabled="{Binding HasContent}" />
+          </Grid>
+
+          <TextBlock Grid.Row="1"
+                     Text="{Binding ShortPath}"
+                     Margin="0,4,0,0"
+                     Foreground="{StaticResource MutedTextBrush}"
+                     FontSize="10" />
+
+              <Grid Grid.Row="2" Margin="0,8,0,0" HorizontalAlignment="Stretch">
+            <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Button Grid.Row="0"
+                  Grid.Column="0"
+                    Content="A"
                     Tag="{Binding}"
-                    Click="CloseSlotButton_Click"
-                    Style="{StaticResource SlotActionButton}"
-                    Margin="8,0,0,0"
-                    VerticalAlignment="Center" />
+                    CommandParameter="A"
+                    Click="ShowStoredPanelButton_Click"
+                    Style="{StaticResource StoredAssignButton}"
+                  HorizontalAlignment="Stretch"
+                  Margin="0,0,4,4"
+                    IsEnabled="{Binding HasContent}" />
+                <Button Grid.Row="0"
+                  Grid.Column="1"
+                    Content="B"
+                    Tag="{Binding}"
+                    CommandParameter="B"
+                    Click="ShowStoredPanelButton_Click"
+                    Style="{StaticResource StoredAssignButton}"
+                  HorizontalAlignment="Stretch"
+                  Margin="4,0,0,4"
+                    IsEnabled="{Binding HasContent}" />
+                <Button Grid.Row="1"
+                  Grid.Column="0"
+                    Content="C"
+                    Tag="{Binding}"
+                    CommandParameter="C"
+                    Click="ShowStoredPanelButton_Click"
+                    Style="{StaticResource StoredAssignButton}"
+                  HorizontalAlignment="Stretch"
+                  Margin="0,4,4,0"
+                    IsEnabled="{Binding HasContent}" />
+                <Button Grid.Row="1"
+                  Grid.Column="1"
+                    Content="D"
+                    Tag="{Binding}"
+                    CommandParameter="D"
+                    Click="ShowStoredPanelButton_Click"
+                    Style="{StaticResource StoredAssignButton}"
+                  HorizontalAlignment="Stretch"
+                  Margin="4,4,0,0"
+                    IsEnabled="{Binding HasContent}" />
           </Grid>
         </Grid>
       </Border>
@@ -351,6 +511,7 @@
   <Grid Background="{StaticResource PanelBackgroundBrush}" Margin="8">
     <Grid.RowDefinitions>
       <RowDefinition Height="26" />
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
@@ -392,7 +553,42 @@
                       Margin="5" />
     </UniformGrid>
 
-    <Grid Grid.Row="2" Margin="5,2,5,3">
+    <Expander Grid.Row="2"
+          x:Name="StoredPanelsExpander"
+              Style="{StaticResource StoredPanelsExpanderStyle}"
+              IsExpanded="False"
+          Expanded="StoredPanelsExpander_Expanded"
+          Collapsed="StoredPanelsExpander_Collapsed"
+              Margin="5,2,5,3">
+      <Expander.Header>
+        <TextBlock Text="裏保存 Quartet"
+                   Foreground="{StaticResource MutedTextBrush}"
+                   FontSize="10" />
+      </Expander.Header>
+            <Border x:Name="StoredPanelsExpanderContent"
+              Background="{StaticResource SurfaceBrush}"
+              BorderBrush="{StaticResource BorderBrushSoft}"
+              BorderThickness="1"
+              CornerRadius="8"
+              Margin="0,6,0,0"
+              Padding="6">
+        <UniformGrid Columns="4">
+          <ContentControl Content="{Binding StoredPanels[0]}"
+                          ContentTemplate="{StaticResource StoredPanelTemplate}"
+                          Margin="0,0,4,0" />
+          <ContentControl Content="{Binding StoredPanels[1]}"
+                          ContentTemplate="{StaticResource StoredPanelTemplate}"
+                          Margin="0,0,4,0" />
+          <ContentControl Content="{Binding StoredPanels[2]}"
+                          ContentTemplate="{StaticResource StoredPanelTemplate}"
+                          Margin="0,0,4,0" />
+          <ContentControl Content="{Binding StoredPanels[3]}"
+                          ContentTemplate="{StaticResource StoredPanelTemplate}" />
+        </UniformGrid>
+      </Border>
+    </Expander>
+
+    <Grid Grid.Row="3" Margin="5,2,5,3">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" />
         <ColumnDefinition Width="Auto" />
@@ -466,12 +662,113 @@
       </Grid>
     </Grid>
 
-        <Button Grid.Row="3"
+        <Button Grid.Row="4"
           x:Name="LaunchButton"
               Content="Launch Quartet"
             Click="LaunchButton_Click"
             Style="{StaticResource LaunchButtonStyle}"
             HorizontalAlignment="Stretch"
             Margin="5,5,5,0" />
+
+    <Border x:Name="DeleteStoredPanelOverlay"
+            Grid.RowSpan="5"
+            Visibility="Collapsed"
+            Background="#96090B0A"
+            Panel.ZIndex="20">
+      <Grid>
+        <Border Width="372"
+                MaxWidth="420"
+                Padding="16"
+                Background="{StaticResource SurfaceBrush}"
+                BorderBrush="#6A3832"
+                BorderThickness="1"
+                CornerRadius="12"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+          <Grid>
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+              </Grid.ColumnDefinitions>
+
+              <Border Width="34"
+                      Height="34"
+                      CornerRadius="10"
+                      Background="#2B1715"
+                      BorderBrush="#6A3832"
+                      BorderThickness="1"
+                      Margin="0,0,12,0">
+                <TextBlock Text="&#xE74D;"
+                           FontFamily="Segoe MDL2 Assets"
+                           FontSize="16"
+                           Foreground="#F2B7AF"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+              </Border>
+
+              <StackPanel Grid.Column="1">
+                <TextBlock Text="裏保存を削除しますか？"
+                           FontSize="15"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextBrush}" />
+                <TextBlock x:Name="DeleteStoredPanelMessageText"
+                           Margin="0,5,0,0"
+                           TextWrapping="Wrap"
+                           Foreground="{StaticResource MutedTextBrush}" />
+              </StackPanel>
+            </Grid>
+
+            <Border Grid.Row="1"
+                    Margin="0,14,0,0"
+                    Padding="10,8"
+                    Background="#1D2420"
+                    BorderBrush="{StaticResource BorderBrushSoft}"
+                    BorderThickness="1"
+                    CornerRadius="8">
+              <StackPanel>
+                <TextBlock x:Name="DeleteStoredPanelDetailText"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource TextBrush}" />
+                <TextBlock x:Name="DeleteStoredPanelPathText"
+                           Margin="0,4,0,0"
+                           Foreground="{StaticResource MutedTextBrush}"
+                           FontSize="10"
+                           TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+
+            <TextBlock Grid.Row="2"
+                       Margin="0,12,0,0"
+                       Text="削除すると、この裏保存スロットは空きになります。"
+                       Foreground="{StaticResource MutedTextBrush}"
+                       TextWrapping="Wrap" />
+
+            <StackPanel Grid.Row="3"
+                        Margin="0,16,0,0"
+                        Orientation="Horizontal"
+                        HorizontalAlignment="Right">
+              <Button x:Name="CancelDeleteStoredPanelButton"
+                      Content="キャンセル"
+                      Click="CancelDeleteStoredPanelButton_Click"
+                      Style="{StaticResource BaseButton}"
+                      MinWidth="96"
+                      Margin="0,0,8,0" />
+              <Button x:Name="ConfirmDeleteStoredPanelButton"
+                      Content="削除する"
+                      Click="ConfirmDeleteStoredPanelButton_Click"
+                      Style="{StaticResource DangerButtonStyle}" />
+            </StackPanel>
+          </Grid>
+        </Border>
+      </Grid>
+    </Border>
   </Grid>
 </Window>
