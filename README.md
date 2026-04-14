@@ -127,6 +127,8 @@ dist/
 
 配布時に固定設定を同梱する場合は、同じ階層に `config\vscode-square.json` を置きます。
 
+GPL-3.0 で配布する場合は、出力物と一緒にルートの `LICENSE.txt` も同梱してください。
+
 ```powershell
 Copy-Item .\config\vscode-square.example.json .\dist\vscode-square\config\vscode-square.json
 ```
@@ -142,3 +144,7 @@ dotnet publish .\src\VscodeSquare.Panel\VscodeSquare.Panel.csproj -c Release -o 
 この WPF パネル単体で安定して取れるのは、Win32 で見える VS Code ウィンドウのハンドル、タイトル、プロセス情報までです。
 
 VS Code の開いているタブ、ワークスペース、インストール済み拡張機能、拡張機能の状態を正確に取るには、VS Code 補助拡張を作り、VS Code API から取得した情報をローカルファイルなどへ書き出す構成が適しています。候補 API は `vscode.window.tabGroups.all`、`vscode.workspace.workspaceFolders`、`vscode.extensions.all` です。
+
+## ライセンス
+
+このプロジェクトは GNU General Public License v3.0 で公開します。詳細は `LICENSE.txt` を参照してください。
