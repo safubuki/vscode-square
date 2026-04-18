@@ -51,9 +51,19 @@ public sealed class VscodeChatUiStatusReader
 
     public AiStatusSnapshot? TryRead(WindowSlot slot)
     {
+        return TryRead(slot.WindowHandle);
+    }
+
+    internal AiStatusSnapshot? TryRead(WindowSlotStatusSnapshot slot)
+    {
+        return TryRead(slot.WindowHandle);
+    }
+
+    private AiStatusSnapshot? TryRead(IntPtr windowHandle)
+    {
         try
         {
-            var root = AutomationElement.FromHandle(slot.WindowHandle);
+            var root = AutomationElement.FromHandle(windowHandle);
             if (root is null)
             {
                 return null;

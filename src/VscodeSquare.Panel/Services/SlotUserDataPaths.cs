@@ -46,7 +46,12 @@ public static class SlotUserDataPaths
 
     public static string GetUserDataDirectory(WindowSlot slot, AppConfig config)
     {
-        var safeSlotName = new string(slot.Name.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray());
+        return GetUserDataDirectory(slot.Name, config);
+    }
+
+    public static string GetUserDataDirectory(string slotName, AppConfig config)
+    {
+        var safeSlotName = new string(slotName.Select(ch => char.IsLetterOrDigit(ch) ? ch : '-').ToArray());
         if (string.IsNullOrWhiteSpace(safeSlotName))
         {
             safeSlotName = "slot";
@@ -57,12 +62,17 @@ public static class SlotUserDataPaths
 
     public static string GetEffectiveUserDataDirectory(WindowSlot slot, AppConfig config)
     {
+        return GetEffectiveUserDataDirectory(slot.Name, config);
+    }
+
+    public static string GetEffectiveUserDataDirectory(string slotName, AppConfig config)
+    {
         if (config.UseDedicatedUserDataDirs)
         {
-            return GetUserDataDirectory(slot, config);
+            return GetUserDataDirectory(slotName, config);
         }
 
-        return GetInstalledUserDataDirectory(config.CodeCommand) ?? GetUserDataDirectory(slot, config);
+        return GetInstalledUserDataDirectory(config.CodeCommand) ?? GetUserDataDirectory(slotName, config);
     }
 
     public static void PrepareDedicatedUserData(WindowSlot slot, AppConfig config, string codeCommand)

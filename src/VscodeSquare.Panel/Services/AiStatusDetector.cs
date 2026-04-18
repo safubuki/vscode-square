@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.IO;
 using VscodeSquare.Panel.Models;
@@ -6,12 +7,14 @@ namespace VscodeSquare.Panel.Services;
 
 public sealed class AiStatusDetector
 {
-    private static readonly TimeSpan CompletionSignalWindow = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan ErrorSignalWindow = TimeSpan.FromMinutes(3);
     private const int MaxRecentLogBytes = 96 * 1024;
+    private readonly DateTimeOffset _startedAt = DateTimeOffset.Now;
     private readonly VscodeChatUiStatusReader _uiStatusReader = new();
-    private readonly Dictionary<string, DateTimeOffset> _lastRunningSeenBySlot = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, DateTimeOffset> _completedUntilBySlot = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _lastRunningSeenBySlot = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _completedAtBySlot = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _dismissedAtBySlot = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, DateTimeOffset> _slotStartedAtByName = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly ExtensionLogSource[] LogSources =
     [
@@ -37,6 +40,18 @@ public sealed class AiStatusDetector
 
     public AiStatusSnapshot Detect(WindowSlot slot, AppConfig config)
     {
+        return Detect(
+            new WindowSlotStatusSnapshot(
+                slot.Name,
+                slot.WindowHandle,
+                slot.WindowTitle,
+                slot.CurrentWorkspacePath,
+                null),
+            config);
+    }
+
+    internal AiStatusSnapshot Detect(WindowSlotStatusSnapshot slot, AppConfig config)
+    {
         if (slot.WindowHandle == IntPtr.Zero)
         {
             ClearSlotState(slot);
@@ -44,32 +59,28 @@ public sealed class AiStatusDetector
         }
 
         var slotKey = GetSlotKey(slot);
+        var slotStartedAt = GetSlotStartedAt(slot);
         var now = DateTimeOffset.Now;
         var uiEvidence = _uiStatusReader.TryRead(slot);
         if (uiEvidence is { Status: AiStatus.Running })
         {
             _lastRunningSeenBySlot[slotKey] = now;
-            _completedUntilBySlot.Remove(slotKey);
+            _completedAtBySlot.TryRemove(slotKey, out _);
             return uiEvidence;
         }
 
-        if (_lastRunningSeenBySlot.Remove(slotKey, out var lastRunningSeenAt))
+        if (_lastRunningSeenBySlot.TryRemove(slotKey, out var lastRunningSeenAt))
         {
-            _completedUntilBySlot[slotKey] = now.Add(CompletionSignalWindow);
+            _completedAtBySlot[slotKey] = now;
             return new AiStatusSnapshot(AiStatus.Completed, $"VS Code UI: {lastRunningSeenAt:HH:mm:ss} の実行中表示が終了しました。", now);
         }
 
-        if (_completedUntilBySlot.TryGetValue(slotKey, out var completedUntil))
+        if (_completedAtBySlot.TryGetValue(slotKey, out var completedAt))
         {
-            if (now <= completedUntil)
-            {
-                return new AiStatusSnapshot(AiStatus.Completed, "VS Code UI: 直前のAI実行は完了しました。", completedUntil - CompletionSignalWindow);
-            }
-
-            _completedUntilBySlot.Remove(slotKey);
+            return new AiStatusSnapshot(AiStatus.Completed, "VS Code UI: 直前のAI実行は完了しました。", completedAt);
         }
 
-        var userDataDirectory = SlotUserDataPaths.GetEffectiveUserDataDirectory(slot, config);
+        var userDataDirectory = SlotUserDataPaths.GetEffectiveUserDataDirectory(slot.Name, config);
         if (string.IsNullOrWhiteSpace(userDataDirectory) || !Directory.Exists(userDataDirectory))
         {
             return new AiStatusSnapshot(AiStatus.Idle, "VS Code の user-data-dir が見つかりません。AI は待機中として扱います。", null);
@@ -77,6 +88,7 @@ public sealed class AiStatusDetector
 
         var evidences = LogSources
             .Select(source => ReadEvidence(userDataDirectory, source))
+            .Select(evidence => KeepOnlyCurrentEvidence(slotKey, slotStartedAt, evidence))
             .Where(evidence => evidence.Status is AiStatus.Completed or AiStatus.Error or AiStatus.NeedsAttention or AiStatus.WaitingForConfirmation)
             .ToList();
 
@@ -86,6 +98,42 @@ public sealed class AiStatusDetector
         }
 
         return GetBestEvidence(evidences);
+    }
+
+    public void Acknowledge(WindowSlot slot)
+    {
+        var slotKey = GetSlotKey(slot);
+        _lastRunningSeenBySlot.TryRemove(slotKey, out _);
+        _completedAtBySlot.TryRemove(slotKey, out _);
+        _dismissedAtBySlot[slotKey] = DateTimeOffset.Now;
+    }
+
+    public void ResetSlotSession(WindowSlot slot)
+    {
+        ClearSlotState(slot);
+        _slotStartedAtByName[slot.Name] = DateTimeOffset.Now;
+    }
+
+    private AiStatusSnapshot KeepOnlyCurrentEvidence(string slotKey, DateTimeOffset slotStartedAt, AiStatusSnapshot evidence)
+    {
+        if (evidence.Status != AiStatus.Completed || !evidence.EventAt.HasValue)
+        {
+            return evidence;
+        }
+
+        var eventAt = evidence.EventAt.Value;
+        if (eventAt < _startedAt || eventAt < slotStartedAt)
+        {
+            return new AiStatusSnapshot(AiStatus.Idle, "AI は待機中です。", eventAt);
+        }
+
+        if (_dismissedAtBySlot.TryGetValue(slotKey, out var dismissedAt) && eventAt <= dismissedAt)
+        {
+            return new AiStatusSnapshot(AiStatus.Idle, "AI は待機中です。", eventAt);
+        }
+
+        _completedAtBySlot[slotKey] = eventAt;
+        return evidence;
     }
 
     private static AiStatusSnapshot GetBestEvidence(IEnumerable<AiStatusSnapshot> evidences)
@@ -101,17 +149,42 @@ public sealed class AiStatusDetector
         return $"{slot.Name}:{slot.WindowHandle.ToInt64()}";
     }
 
+    private static string GetSlotKey(WindowSlotStatusSnapshot slot)
+    {
+        return $"{slot.Name}:{slot.WindowHandle.ToInt64()}";
+    }
+
+    private DateTimeOffset GetSlotStartedAt(WindowSlotStatusSnapshot slot)
+    {
+        return _slotStartedAtByName.GetOrAdd(slot.Name, _startedAt);
+    }
+
     private void ClearSlotState(WindowSlot slot)
     {
-        var prefix = $"{slot.Name}:";
+        ClearSlotState(slot.Name);
+    }
+
+    private void ClearSlotState(WindowSlotStatusSnapshot slot)
+    {
+        ClearSlotState(slot.Name);
+    }
+
+    private void ClearSlotState(string slotName)
+    {
+        var prefix = $"{slotName}:";
         foreach (var key in _lastRunningSeenBySlot.Keys.Where(key => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList())
         {
-            _lastRunningSeenBySlot.Remove(key);
+            _lastRunningSeenBySlot.TryRemove(key, out _);
         }
 
-        foreach (var key in _completedUntilBySlot.Keys.Where(key => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList())
+        foreach (var key in _completedAtBySlot.Keys.Where(key => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList())
         {
-            _completedUntilBySlot.Remove(key);
+            _completedAtBySlot.TryRemove(key, out _);
+        }
+
+        foreach (var key in _dismissedAtBySlot.Keys.Where(key => key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            _dismissedAtBySlot.TryRemove(key, out _);
         }
     }
 
@@ -304,14 +377,13 @@ public sealed class AiStatusDetector
             var completionIsNewer = evidence.LastCompletionSignalAt.HasValue
                 && evidence.LastCompletionSignalAt.Value >= runningAt;
 
-            if (completionIsNewer && evidence.LastCompletionSignalAt is { } completedAt && now - completedAt <= CompletionSignalWindow)
+            if (completionIsNewer && evidence.LastCompletionSignalAt is { } completedAt)
             {
                 return new AiStatusSnapshot(AiStatus.Completed, $"{evidence.SourceName}: {completedAt:HH:mm:ss} に完了イベントを検出しました。", completedAt);
             }
         }
 
-        if (evidence.LastCompletionSignalAt is { } standaloneCompletedAt
-            && now - standaloneCompletedAt <= CompletionSignalWindow)
+        if (evidence.LastCompletionSignalAt is { } standaloneCompletedAt)
         {
             return new AiStatusSnapshot(AiStatus.Completed, $"{evidence.SourceName}: {standaloneCompletedAt:HH:mm:ss} に完了イベントを検出しました。", standaloneCompletedAt);
         }

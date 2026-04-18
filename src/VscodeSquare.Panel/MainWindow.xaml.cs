@@ -12,16 +12,16 @@ namespace VscodeSquare.Panel;
 
 public partial class MainWindow : Window
 {
-    private const int FocusPanelFrontDelayMilliseconds = 500;
     private readonly WindowEnumerator _windowEnumerator = new();
     private readonly WindowArranger _windowArranger = new();
     private readonly VscodeLauncher _vscodeLauncher;
     private readonly StatusStore _statusStore;
     private readonly DispatcherTimer _refreshTimer;
+    private readonly CancellationTokenSource _refreshCancellation = new();
     private WindowSlot.SlotWindowLayerMode _managedWindowLayerMode = WindowSlot.SlotWindowLayerMode.Topmost;
     private int? _activeMonitorIndex;
     private bool _isBusy;
-    private CancellationTokenSource? _bringPanelToFrontDelayCts;
+    private bool _isRefreshInFlight;
     private double _collapsedWindowHeight;
     private double _collapsedWindowMinHeight;
     private StoredPanelSlot? _pendingStoredPanelDeletion;
@@ -35,19 +35,19 @@ public partial class MainWindow : Window
         _vscodeLauncher = new VscodeLauncher(_windowEnumerator);
         DataContext = _statusStore;
 
-        _refreshTimer = new DispatcherTimer
+        _refreshTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
             Interval = TimeSpan.FromSeconds(2)
         };
-        _refreshTimer.Tick += (_, _) => RefreshSlots();
+        _refreshTimer.Tick += RefreshTimer_Tick;
         _refreshTimer.Start();
 
-        Loaded += (_, _) =>
+        Loaded += async (_, _) =>
         {
             Topmost = true;
             _collapsedWindowHeight = Height;
             _collapsedWindowMinHeight = MinHeight;
-            RefreshSlots();
+            await RefreshSlotsAsync(allowDuringBusy: true);
             ApplyManagedWindowLayers();
             UpdateWindowHeightForStoredPanels(StoredPanelsExpander.IsExpanded, true);
         };
@@ -63,7 +63,7 @@ public partial class MainWindow : Window
         await RunBusyAsync(async () =>
         {
             _statusStore.LoadSavedSettings();
-            RefreshSlots();
+            await RefreshSlotsAsync(allowDuringBusy: true);
 
             if (!_vscodeLauncher.IsCodeCommandAvailable(_statusStore.Config.CodeCommand))
             {
@@ -82,7 +82,7 @@ public partial class MainWindow : Window
                 _statusStore.AssignWindow(assignment.Slot, assignment.Window);
             }
 
-            RefreshSlots();
+            await RefreshSlotsAsync(allowDuringBusy: true);
 
             if (assignments.Count > 0)
             {
@@ -108,29 +108,25 @@ public partial class MainWindow : Window
 
     private void CloseButton_Click(object sender, RoutedEventArgs e)
     {
-        CancelPendingPanelFrontRestore();
         Close();
     }
 
     private void SaveSettingsButton_Click(object sender, RoutedEventArgs e)
     {
-        RefreshSlots();
         _statusStore.SaveCurrentSettings();
         _statusStore.Message = "設定を保存しました。";
     }
 
-    private void LoadSettingsButton_Click(object sender, RoutedEventArgs e)
+    private async void LoadSettingsButton_Click(object sender, RoutedEventArgs e)
     {
         _statusStore.LoadSavedSettings();
-        RefreshSlots();
+        await RefreshSlotsAsync(allowDuringBusy: true);
         _statusStore.Message = "設定を読み込みました。";
     }
 
     private void CloseAllButton_Click(object sender, RoutedEventArgs e)
     {
-        RefreshSlots();
-        _statusStore.SaveCurrentSettings();
-
+        var closedSlots = new List<WindowSlot>();
         var closed = 0;
         foreach (var slot in _statusStore.Slots)
         {
@@ -139,8 +135,17 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            _statusStore.ClearWindow(slot);
+            closedSlots.Add(slot);
             closed++;
+        }
+
+        if (closedSlots.Count > 0)
+        {
+            _statusStore.SaveCurrentSettings();
+            foreach (var slot in closedSlots)
+            {
+                _statusStore.ClearWindow(slot);
+            }
         }
 
         _statusStore.Message = closed == 0
@@ -160,30 +165,36 @@ public partial class MainWindow : Window
             return;
         }
 
+        _statusStore.AcknowledgeAiStatus(slot);
         ToggleSlotFocus(slot);
     }
 
     private void ToggleSlotFocus(WindowSlot slot)
     {
-        RefreshSlots();
-        CancelPendingPanelFrontRestore();
+        var previouslyFocusedSlot = _statusStore.Slots.FirstOrDefault(item => item.IsFocused);
 
         if (slot.IsFocused)
         {
             var arranged = ArrangeSlotsOnActiveMonitor(false);
             _statusStore.ClearFocusedSlot();
-            SchedulePanelBringToFront();
+            BringPanelToFront();
             _statusStore.Message = arranged == 0
                 ? "4分割表示に戻せるVS Codeウィンドウがありません。"
                 : $"{arranged}個のVS Codeを4分割表示に戻しました。";
             return;
         }
 
-        SetManagedWindowLayer(WindowSlot.SlotWindowLayerMode.Topmost, false);
+        if (previouslyFocusedSlot is not null)
+        {
+            ArrangeSlotsOnActiveMonitor(false);
+            _statusStore.ClearFocusedSlot();
+            _windowArranger.SetBackmost(previouslyFocusedSlot.WindowHandle);
+        }
+
+        SetManagedWindowLayerState(WindowSlot.SlotWindowLayerMode.Topmost);
         if (_windowArranger.FocusMaximized(slot.WindowHandle))
         {
             _statusStore.SetFocusedSlot(slot);
-            SchedulePanelBringToFront();
             _statusStore.Message = $"スロット{slot.Name}をフォーカス表示しました。";
             return;
         }
@@ -193,7 +204,6 @@ public partial class MainWindow : Window
 
     private void PinAllTopButton_Click(object sender, RoutedEventArgs e)
     {
-        RefreshSlots();
         if (SetManagedWindowLayer(WindowSlot.SlotWindowLayerMode.Topmost))
         {
             _statusStore.Message = "管理中のVS Codeを最前面にしました。";
@@ -205,11 +215,10 @@ public partial class MainWindow : Window
 
     private void SendAllBackButton_Click(object sender, RoutedEventArgs e)
     {
-        RefreshSlots();
         if (_statusStore.Slots.Any(slot => slot.IsFocused))
         {
             _statusStore.ClearFocusedSlot();
-            ArrangeSlotsOnActiveMonitor();
+            ArrangeSlotsOnActiveMonitor(false);
         }
 
         if (SetManagedWindowLayer(WindowSlot.SlotWindowLayerMode.Backmost))
@@ -223,8 +232,6 @@ public partial class MainWindow : Window
 
     private void ToggleMonitorButton_Click(object sender, RoutedEventArgs e)
     {
-        RefreshSlots();
-
         var monitorCount = _windowArranger.GetMonitorCount();
         if (monitorCount <= 1)
         {
@@ -249,10 +256,10 @@ public partial class MainWindow : Window
             return;
         }
 
-        RefreshSlots();
-        _statusStore.CaptureWorkspacePath(slot);
+        _statusStore.AcknowledgeAiStatus(slot);
         if (_windowArranger.Close(slot.WindowHandle))
         {
+            _statusStore.CaptureWorkspacePath(slot);
             _statusStore.ClearWindow(slot);
             _statusStore.Message = $"スロット{slot.Name}を閉じました。";
             return;
@@ -273,8 +280,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        RefreshSlots();
-        _statusStore.CaptureWorkspacePath(slot);
+        _statusStore.AcknowledgeAiStatus(slot);
 
         if (slot.WindowHandle != IntPtr.Zero && !_windowArranger.Close(slot.WindowHandle))
         {
@@ -282,6 +288,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        _statusStore.CaptureWorkspacePath(slot);
         _statusStore.ClearFocusedSlot();
         if (!_statusStore.TryStoreSlotInBack(slot, out var storedPanel))
         {
@@ -319,17 +326,16 @@ public partial class MainWindow : Window
             return;
         }
 
+        _statusStore.AcknowledgeAiStatus(targetSlot);
         await RunBusyAsync(async () =>
         {
-            RefreshSlots();
-            _statusStore.CaptureWorkspacePath(targetSlot);
-
             if (targetSlot.WindowHandle != IntPtr.Zero && !_windowArranger.Close(targetSlot.WindowHandle))
             {
                 _statusStore.Message = $"スロット{targetSlot.Name}の現在の VS Code を閉じられないため入れ替えできません。";
                 return;
             }
 
+            _statusStore.CaptureWorkspacePath(targetSlot);
             _statusStore.ClearFocusedSlot();
             if (!_statusStore.TryShowStoredPanel(storedPanel, targetSlot, out var swappedVisiblePanel))
             {
@@ -347,7 +353,6 @@ public partial class MainWindow : Window
                 _statusStore.AssignWindow(assignment.Slot, assignment.Window);
             }
 
-            RefreshSlots();
             ArrangeSlotsOnActiveMonitor();
             _statusStore.Message = assignments.Count > 0
                 ? swappedVisiblePanel
@@ -383,7 +388,7 @@ public partial class MainWindow : Window
             : storedPanel.WorkspacePath;
 
         DeleteStoredPanelOverlay.Visibility = Visibility.Visible;
-        Dispatcher.BeginInvoke(() => CancelDeleteStoredPanelButton.Focus(), DispatcherPriority.Input);
+        CancelDeleteStoredPanelButton.Focus();
     }
 
     private void ConfirmDeleteStoredPanelButton_Click(object sender, RoutedEventArgs e)
@@ -407,17 +412,40 @@ public partial class MainWindow : Window
 
     private void StoredPanelsExpander_Expanded(object sender, RoutedEventArgs e)
     {
-        Dispatcher.BeginInvoke(() => UpdateWindowHeightForStoredPanels(true), DispatcherPriority.Loaded);
+        UpdateWindowHeightForStoredPanels(true);
     }
 
     private void StoredPanelsExpander_Collapsed(object sender, RoutedEventArgs e)
     {
-        Dispatcher.BeginInvoke(() => UpdateWindowHeightForStoredPanels(false), DispatcherPriority.Loaded);
+        UpdateWindowHeightForStoredPanels(false);
     }
 
-    private void RefreshSlots()
+    private async void RefreshTimer_Tick(object? sender, EventArgs e)
     {
-        _statusStore.RefreshWindowStatuses(_windowEnumerator);
+        await RefreshSlotsAsync();
+    }
+
+    private async Task RefreshSlotsAsync(bool allowDuringBusy = false)
+    {
+        if (_refreshCancellation.IsCancellationRequested
+            || _isRefreshInFlight
+            || _isBusy && !allowDuringBusy)
+        {
+            return;
+        }
+
+        _isRefreshInFlight = true;
+        try
+        {
+            await _statusStore.RefreshWindowStatusesAsync(_windowEnumerator, _refreshCancellation.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _isRefreshInFlight = false;
+        }
     }
 
     private int ArrangeSlotsOnActiveMonitor(bool bringPanelAfterArrange = true)
@@ -432,9 +460,18 @@ public partial class MainWindow : Window
         SetManagedWindowLayer(_managedWindowLayerMode, bringPanelAfterChange);
     }
 
-    private bool SetManagedWindowLayer(WindowSlot.SlotWindowLayerMode layerMode, bool bringPanelAfterChange = true)
+    private void SetManagedWindowLayerState(WindowSlot.SlotWindowLayerMode layerMode)
     {
         _managedWindowLayerMode = layerMode;
+        foreach (var slot in _statusStore.Slots)
+        {
+            slot.WindowLayerMode = layerMode;
+        }
+    }
+
+    private bool SetManagedWindowLayer(WindowSlot.SlotWindowLayerMode layerMode, bool bringPanelAfterChange = true)
+    {
+        SetManagedWindowLayerState(layerMode);
         var appliedAny = false;
 
         foreach (var slot in _statusStore.Slots)
@@ -458,7 +495,6 @@ public partial class MainWindow : Window
             return false;
         }
 
-        slot.WindowLayerMode = layerMode;
         var applied = layerMode switch
         {
             WindowSlot.SlotWindowLayerMode.Topmost => _windowArranger.BringToFrontOnce(slot.WindowHandle),
@@ -488,44 +524,6 @@ public partial class MainWindow : Window
         }
 
         _windowArranger.BringToFront(panelHandle);
-    }
-
-    private void SchedulePanelBringToFront()
-    {
-        CancelPendingPanelFrontRestore();
-
-        var cts = new CancellationTokenSource();
-        _bringPanelToFrontDelayCts = cts;
-        _ = RestorePanelToFrontAfterDelayAsync(cts.Token);
-    }
-
-    private async Task RestorePanelToFrontAfterDelayAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await Task.Delay(FocusPanelFrontDelayMilliseconds, cancellationToken);
-            if (cancellationToken.IsCancellationRequested)
-            {
-                return;
-            }
-
-            BringPanelToFront();
-        }
-        catch (OperationCanceledException)
-        {
-        }
-    }
-
-    private void CancelPendingPanelFrontRestore()
-    {
-        if (_bringPanelToFrontDelayCts is null)
-        {
-            return;
-        }
-
-        _bringPanelToFrontDelayCts.Cancel();
-        _bringPanelToFrontDelayCts.Dispose();
-        _bringPanelToFrontDelayCts = null;
     }
 
     private void HideDeleteStoredPanelDialog()
@@ -630,6 +628,13 @@ public partial class MainWindow : Window
         }
 
         base.OnPreviewKeyDown(e);
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _refreshTimer.Stop();
+        _refreshCancellation.Cancel();
+        base.OnClosed(e);
     }
 
     private async Task RunBusyAsync(Func<Task> action)

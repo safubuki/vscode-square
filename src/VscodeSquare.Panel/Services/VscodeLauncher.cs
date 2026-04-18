@@ -1,13 +1,18 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using VscodeSquare.Panel.Models;
 
 namespace VscodeSquare.Panel.Services;
 
 public sealed class VscodeLauncher
 {
-    private const int LaunchStaggerMilliseconds = 350;
+    private const uint EventObjectCreate = 0x8000;
+    private const uint EventObjectNameChange = 0x800C;
+    private const int ObjectIdWindow = 0;
+    private const uint WineventOutOfContext = 0x0000;
+    private const uint WineventSkipOwnProcess = 0x0002;
     private readonly WindowEnumerator _windowEnumerator;
 
     public VscodeLauncher(WindowEnumerator windowEnumerator)
@@ -69,10 +74,6 @@ public sealed class VscodeLauncher
             knownHandles.Add(window.Handle);
             assignments.Add(new WindowAssignment(slot, window));
 
-            if (assignments.Count < launchTargets.Count)
-            {
-                await Task.Delay(LaunchStaggerMilliseconds, cancellationToken);
-            }
         }
 
         foreach (var pendingSlot in launchTargets.Skip(assignments.Count))
@@ -91,29 +92,73 @@ public sealed class VscodeLauncher
         TimeSpan timeout,
         CancellationToken cancellationToken)
     {
-        var deadline = DateTimeOffset.UtcNow + timeout;
-
-        while (DateTimeOffset.UtcNow < deadline)
+        var existingWindow = FindNewWindow(knownHandles);
+        if (existingWindow is not null)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var window = await Task.Run(() => _windowEnumerator
-                    .GetVsCodeWindows()
-                    .Where(item => !knownHandles.Contains(item.Handle))
-                    .OrderBy(window => window.ProcessId)
-                    .ThenBy(window => window.Title, StringComparer.OrdinalIgnoreCase)
-                    .FirstOrDefault(),
-                cancellationToken);
-
-            if (window is not null)
-            {
-                return window;
-            }
-
-            await Task.Delay(250, cancellationToken);
+            return existingWindow;
         }
 
-        return null;
+        cancellationToken.ThrowIfCancellationRequested();
+
+        using var timeoutCts = new CancellationTokenSource(timeout);
+        var completionSource = new TaskCompletionSource<WindowInfo?>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        WinEventDelegate callback = (_, _, windowHandle, objectId, childId, _, _) =>
+        {
+            if (objectId != ObjectIdWindow || childId != 0 || knownHandles.Contains(windowHandle))
+            {
+                return;
+            }
+
+            var window = _windowEnumerator.TryGetWindow(windowHandle);
+            if (window is not null && !knownHandles.Contains(window.Handle))
+            {
+                completionSource.TrySetResult(window);
+            }
+        };
+
+        var hook = SetWinEventHook(
+            EventObjectCreate,
+            EventObjectNameChange,
+            IntPtr.Zero,
+            callback,
+            0,
+            0,
+            WineventOutOfContext | WineventSkipOwnProcess);
+
+        if (hook == IntPtr.Zero)
+        {
+            DiagnosticLog.Write("WinEvent hook could not be registered while waiting for a VS Code window.");
+            return FindNewWindow(knownHandles);
+        }
+
+        try
+        {
+            existingWindow = FindNewWindow(knownHandles);
+            if (existingWindow is not null)
+            {
+                return existingWindow;
+            }
+
+            using var timeoutRegistration = timeoutCts.Token.Register(() => completionSource.TrySetResult(null));
+            using var cancellationRegistration = cancellationToken.Register(() => completionSource.TrySetCanceled(cancellationToken));
+            return await completionSource.Task;
+        }
+        finally
+        {
+            UnhookWinEvent(hook);
+            GC.KeepAlive(callback);
+        }
+    }
+
+    private WindowInfo? FindNewWindow(HashSet<IntPtr> knownHandles)
+    {
+        return _windowEnumerator
+            .GetVsCodeWindows()
+            .Where(item => !knownHandles.Contains(item.Handle))
+            .OrderBy(window => window.ProcessId)
+            .ThenBy(window => window.Title, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
     }
 
     private async Task<HashSet<IntPtr>> GetKnownHandlesAsync(CancellationToken cancellationToken)
@@ -441,6 +486,28 @@ public sealed class VscodeLauncher
     {
         return $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
     }
+
+    private delegate void WinEventDelegate(
+        IntPtr winEventHook,
+        uint eventType,
+        IntPtr windowHandle,
+        int objectId,
+        int childId,
+        uint eventThread,
+        uint eventTime);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetWinEventHook(
+        uint eventMin,
+        uint eventMax,
+        IntPtr eventHookAssembly,
+        WinEventDelegate callback,
+        uint processId,
+        uint threadId,
+        uint flags);
+
+    [DllImport("user32.dll")]
+    private static extern bool UnhookWinEvent(IntPtr winEventHook);
 }
 
 public sealed record WindowAssignment(WindowSlot Slot, WindowInfo Window);

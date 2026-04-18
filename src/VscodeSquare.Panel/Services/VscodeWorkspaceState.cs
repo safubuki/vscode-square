@@ -8,21 +8,31 @@ public static class VscodeWorkspaceState
 {
     public static string? TryReadCurrentWorkspacePath(WindowSlot slot, AppConfig config)
     {
-        var workspacePath = TryReadLastWorkspacePath(slot, config);
+        return TryReadCurrentWorkspacePath(slot.Name, slot.WindowTitle, config);
+    }
+
+    public static string? TryReadCurrentWorkspacePath(string slotName, string windowTitle, AppConfig config)
+    {
+        var workspacePath = TryReadLastWorkspacePath(slotName, config);
         if (string.IsNullOrWhiteSpace(workspacePath))
         {
             return null;
         }
 
-        return IsWorkspaceVisibleInWindowTitle(slot.WindowTitle, workspacePath)
+        return IsWorkspaceVisibleInWindowTitle(windowTitle, workspacePath)
             ? workspacePath
             : null;
     }
 
     public static string? TryReadLastWorkspacePath(WindowSlot slot, AppConfig config)
     {
+        return TryReadLastWorkspacePath(slot.Name, config);
+    }
+
+    public static string? TryReadLastWorkspacePath(string slotName, AppConfig config)
+    {
         var workspaceStorageDirectory = Path.Combine(
-            SlotUserDataPaths.GetUserDataDirectory(slot, config),
+            SlotUserDataPaths.GetUserDataDirectory(slotName, config),
             "User",
             "workspaceStorage");
 

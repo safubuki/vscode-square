@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
@@ -77,6 +78,7 @@ public sealed class StatusStore : INotifyPropertyChanged
         slot.WindowStatus = SlotWindowStatus.Ready;
         slot.AiStatus = AiStatus.Idle;
         slot.AiStatusDetail = "AI は待機中です。";
+        _aiStatusDetector.ResetSlotSession(slot);
         slot.LastEventAt = DateTimeOffset.Now;
         slot.WindowLayerMode = WindowSlot.SlotWindowLayerMode.Topmost;
 
@@ -94,8 +96,21 @@ public sealed class StatusStore : INotifyPropertyChanged
     public void ClearWindow(WindowSlot slot)
     {
         _workspaceRefreshTimestamps.Remove(slot.Name);
+        _aiStatusDetector.ResetSlotSession(slot);
         slot.ClearWindow();
         SavePanelStates();
+    }
+
+    public void AcknowledgeAiStatus(WindowSlot slot)
+    {
+        if (slot.AiStatus != AiStatus.Completed)
+        {
+            return;
+        }
+
+        _aiStatusDetector.Acknowledge(slot);
+        slot.AiStatus = AiStatus.Idle;
+        slot.AiStatusDetail = "AI は待機中です。";
     }
 
     public void SetFocusedSlot(WindowSlot focusedSlot)
@@ -131,7 +146,9 @@ public sealed class StatusStore : INotifyPropertyChanged
             return;
         }
 
-        var workspacePath = VscodeWorkspaceState.TryReadCurrentWorkspacePath(slot, Config);
+        var workspacePath = !string.IsNullOrWhiteSpace(slot.CurrentWorkspacePath)
+            ? slot.CurrentWorkspacePath
+            : VscodeWorkspaceState.TryReadCurrentWorkspacePath(slot, Config);
         _workspaceRefreshTimestamps[slot.Name] = DateTimeOffset.UtcNow;
         slot.CurrentWorkspacePath = workspacePath ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(workspacePath))
@@ -244,42 +261,166 @@ public sealed class StatusStore : INotifyPropertyChanged
         SavePanelStates();
     }
 
-    public void RefreshWindowStatuses(WindowEnumerator windowEnumerator)
+    public async Task RefreshWindowStatusesAsync(
+        WindowEnumerator windowEnumerator,
+        CancellationToken cancellationToken)
     {
-        foreach (var slot in Slots)
+        var refreshStartedAt = DateTimeOffset.UtcNow;
+        var requests = Slots
+            .Select(slot => new WindowSlotStatusSnapshot(
+                slot.Name,
+                slot.WindowHandle,
+                slot.WindowTitle,
+                slot.CurrentWorkspacePath,
+                _workspaceRefreshTimestamps.TryGetValue(slot.Name, out var refreshedAt) ? refreshedAt : null))
+            .ToList();
+
+        var stopwatch = Stopwatch.StartNew();
+        var results = await Task.Run(
+            () => RefreshWindowStatusesInBackground(windowEnumerator, requests, refreshStartedAt, cancellationToken),
+            cancellationToken);
+        stopwatch.Stop();
+
+        ApplyWindowStatusRefreshResults(results);
+        if (stopwatch.ElapsedMilliseconds >= 250)
         {
-            if (slot.WindowHandle == IntPtr.Zero)
+            DiagnosticLog.Write($"Status refresh took {stopwatch.ElapsedMilliseconds}ms for {results.Count} slots.");
+        }
+    }
+
+    private IReadOnlyList<WindowSlotStatusRefreshResult> RefreshWindowStatusesInBackground(
+        WindowEnumerator windowEnumerator,
+        IReadOnlyList<WindowSlotStatusSnapshot> requests,
+        DateTimeOffset refreshStartedAt,
+        CancellationToken cancellationToken)
+    {
+        var results = new List<WindowSlotStatusRefreshResult>(requests.Count);
+        foreach (var request in requests)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            results.Add(RefreshWindowStatusInBackground(windowEnumerator, request, refreshStartedAt, cancellationToken));
+        }
+
+        return results;
+    }
+
+    private WindowSlotStatusRefreshResult RefreshWindowStatusInBackground(
+        WindowEnumerator windowEnumerator,
+        WindowSlotStatusSnapshot request,
+        DateTimeOffset refreshStartedAt,
+        CancellationToken cancellationToken)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        try
+        {
+            if (request.WindowHandle == IntPtr.Zero)
             {
-                _workspaceRefreshTimestamps.Remove(slot.Name);
-                slot.CurrentWorkspacePath = string.Empty;
-                slot.WindowStatus = SlotWindowStatus.Missing;
-                slot.AiStatus = AiStatus.Idle;
-                slot.AiStatusDetail = "VS Code は起動していません。";
-                continue;
+                return new WindowSlotStatusRefreshResult(
+                    request.Name,
+                    request.WindowHandle,
+                    WindowSlotRefreshState.NoWindow,
+                    null,
+                    null,
+                    null,
+                    null,
+                    stopwatch.ElapsedMilliseconds);
             }
 
-            var window = windowEnumerator.TryGetWindow(slot.WindowHandle);
+            var window = windowEnumerator.TryGetWindow(request.WindowHandle);
             if (window is null)
             {
-                ClearWindow(slot);
-                continue;
+                return new WindowSlotStatusRefreshResult(
+                    request.Name,
+                    request.WindowHandle,
+                    WindowSlotRefreshState.Missing,
+                    null,
+                    null,
+                    null,
+                    null,
+                    stopwatch.ElapsedMilliseconds);
             }
 
-            var previousTitle = slot.WindowTitle;
-            slot.WindowTitle = window.Title;
-            slot.WindowStatus = SlotWindowStatus.Ready;
-            UpdateAiStatus(slot);
-            if (ShouldRefreshWorkspacePath(slot, !string.Equals(previousTitle, window.Title, StringComparison.Ordinal)))
+            var snapshot = request with { WindowTitle = window.Title };
+            var aiStatus = _aiStatusDetector.Detect(snapshot, Config);
+            string? workspacePath = null;
+            DateTimeOffset? workspaceRefreshedAt = null;
+            if (ShouldRefreshWorkspacePath(snapshot, !string.Equals(request.WindowTitle, window.Title, StringComparison.Ordinal)))
             {
-                slot.CurrentWorkspacePath = VscodeWorkspaceState.TryReadCurrentWorkspacePath(slot, Config) ?? string.Empty;
-                _workspaceRefreshTimestamps[slot.Name] = DateTimeOffset.UtcNow;
+                cancellationToken.ThrowIfCancellationRequested();
+                workspacePath = VscodeWorkspaceState.TryReadCurrentWorkspacePath(snapshot.Name, window.Title, Config);
+                workspaceRefreshedAt = refreshStartedAt;
+            }
+
+            return new WindowSlotStatusRefreshResult(
+                request.Name,
+                request.WindowHandle,
+                WindowSlotRefreshState.Ready,
+                window,
+                aiStatus,
+                workspacePath,
+                workspaceRefreshedAt,
+                stopwatch.ElapsedMilliseconds);
+        }
+        finally
+        {
+            stopwatch.Stop();
+            if (stopwatch.ElapsedMilliseconds >= 150)
+            {
+                DiagnosticLog.Write($"Slot {request.Name} status probe took {stopwatch.ElapsedMilliseconds}ms.");
             }
         }
     }
 
-    private void UpdateAiStatus(WindowSlot slot)
+    private void ApplyWindowStatusRefreshResults(IReadOnlyList<WindowSlotStatusRefreshResult> results)
     {
-        var status = _aiStatusDetector.Detect(slot, Config);
+        foreach (var result in results)
+        {
+            var slot = FindSlot(result.SlotName);
+            if (slot is null || slot.WindowHandle != result.WindowHandle)
+            {
+                continue;
+            }
+
+            switch (result.State)
+            {
+                case WindowSlotRefreshState.NoWindow:
+                    _workspaceRefreshTimestamps.Remove(slot.Name);
+                    _aiStatusDetector.ResetSlotSession(slot);
+                    slot.CurrentWorkspacePath = string.Empty;
+                    slot.WindowStatus = SlotWindowStatus.Missing;
+                    slot.AiStatus = AiStatus.Idle;
+                    slot.AiStatusDetail = "VS Code は起動していません。";
+                    break;
+
+                case WindowSlotRefreshState.Missing:
+                    ClearWindow(slot);
+                    break;
+
+                case WindowSlotRefreshState.Ready:
+                    if (result.Window is not null)
+                    {
+                        slot.WindowTitle = result.Window.Title;
+                    }
+
+                    slot.WindowStatus = SlotWindowStatus.Ready;
+                    if (result.AiStatus is not null)
+                    {
+                        ApplyAiStatus(slot, result.AiStatus);
+                    }
+
+                    if (result.WorkspaceRefreshedAt.HasValue)
+                    {
+                        slot.CurrentWorkspacePath = result.CurrentWorkspacePath ?? string.Empty;
+                        _workspaceRefreshTimestamps[slot.Name] = result.WorkspaceRefreshedAt.Value;
+                    }
+
+                    break;
+            }
+        }
+    }
+
+    private static void ApplyAiStatus(WindowSlot slot, AiStatusSnapshot status)
+    {
         slot.AiStatus = status.Status;
         slot.AiStatusDetail = status.Detail;
         if (status.EventAt.HasValue)
@@ -288,15 +429,15 @@ public sealed class StatusStore : INotifyPropertyChanged
         }
     }
 
-    private bool ShouldRefreshWorkspacePath(WindowSlot slot, bool force)
+    private static bool ShouldRefreshWorkspacePath(WindowSlotStatusSnapshot slot, bool force)
     {
         if (force || string.IsNullOrWhiteSpace(slot.CurrentWorkspacePath))
         {
             return true;
         }
 
-        return !_workspaceRefreshTimestamps.TryGetValue(slot.Name, out var refreshedAt)
-            || DateTimeOffset.UtcNow - refreshedAt >= WorkspaceRefreshInterval;
+        return !slot.WorkspaceRefreshedAt.HasValue
+            || DateTimeOffset.UtcNow - slot.WorkspaceRefreshedAt.Value >= WorkspaceRefreshInterval;
     }
 
     private void LoadSavedPanelStates()

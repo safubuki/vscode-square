@@ -36,6 +36,7 @@
     <SolidColorBrush x:Key="MutedTextBrush" Color="#9AA59E" />
     <SolidColorBrush x:Key="AccentBrush" Color="#45D483" />
     <SolidColorBrush x:Key="AccentDarkBrush" Color="#123222" />
+    <SineEase x:Key="LedEase" EasingMode="EaseInOut" />
 
     <Style TargetType="TextBlock">
       <Setter Property="VerticalAlignment" Value="Center" />
@@ -229,6 +230,20 @@
       <Setter Property="TextAlignment" Value="Center" />
     </Style>
 
+    <Style x:Key="AiPillTextStyle" TargetType="TextBlock" BasedOn="{StaticResource StatusPillTextStyle}">
+      <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Running}">
+          <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+          <Setter Property="FontWeight" Value="SemiBold" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Completed}">
+          <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+          <Setter Property="FontWeight" Value="SemiBold" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
     <Style x:Key="WindowPill" TargetType="Border" BasedOn="{StaticResource TinyPill}">
       <Style.Triggers>
         <DataTrigger Binding="{Binding WindowStatus}" Value="{x:Static models:SlotWindowStatus.Ready}">
@@ -249,12 +264,70 @@
     <Style x:Key="AiPill" TargetType="Border" BasedOn="{StaticResource TinyPill}">
       <Style.Triggers>
         <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Running}">
-          <Setter Property="Background" Value="#302817" />
-          <Setter Property="BorderBrush" Value="#8C702C" />
+          <Setter Property="Background" Value="#123044" />
+          <Setter Property="BorderBrush" Value="#2DA8E8" />
+          <Setter Property="Effect">
+            <Setter.Value>
+              <DropShadowEffect Color="#2DA8E8"
+                                BlurRadius="9"
+                                ShadowDepth="0"
+                                Opacity="0.42" />
+            </Setter.Value>
+          </Setter>
+          <DataTrigger.EnterActions>
+            <BeginStoryboard Name="AiRunningPulse">
+              <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                To="#19536D"
+                                Duration="0:0:0.68"
+                                EasingFunction="{StaticResource LedEase}" />
+                <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                To="#5BD0FF"
+                                Duration="0:0:0.68"
+                                EasingFunction="{StaticResource LedEase}" />
+                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                 To="0.84"
+                                 Duration="0:0:0.68"
+                                 EasingFunction="{StaticResource LedEase}" />
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+          <DataTrigger.ExitActions>
+            <RemoveStoryboard BeginStoryboardName="AiRunningPulse" />
+          </DataTrigger.ExitActions>
         </DataTrigger>
         <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Completed}">
-          <Setter Property="Background" Value="{StaticResource AccentDarkBrush}" />
+          <Setter Property="Background" Value="#123222" />
           <Setter Property="BorderBrush" Value="#287B4A" />
+          <Setter Property="Effect">
+            <Setter.Value>
+              <DropShadowEffect Color="#45D483"
+                                BlurRadius="10"
+                                ShadowDepth="0"
+                                Opacity="0.36" />
+            </Setter.Value>
+          </Setter>
+          <DataTrigger.EnterActions>
+            <BeginStoryboard Name="AiCompletedPulse">
+              <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                To="#17482F"
+                                Duration="0:0:2.1"
+                                EasingFunction="{StaticResource LedEase}" />
+                <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                To="#45D483"
+                                Duration="0:0:2.1"
+                                EasingFunction="{StaticResource LedEase}" />
+                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                 To="0.9"
+                                 Duration="0:0:2.1"
+                                 EasingFunction="{StaticResource LedEase}" />
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+          <DataTrigger.ExitActions>
+            <RemoveStoryboard BeginStoryboardName="AiCompletedPulse" />
+          </DataTrigger.ExitActions>
         </DataTrigger>
         <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Error}">
           <Setter Property="Background" Value="#311B1A" />
@@ -286,6 +359,31 @@
         <DataTrigger Binding="{Binding IsFocused}" Value="True">
           <Setter Property="Background" Value="#18231D" />
           <Setter Property="BorderBrush" Value="#45D483" />
+          <Setter Property="Effect">
+            <Setter.Value>
+              <DropShadowEffect Color="#45D483"
+                                BlurRadius="11"
+                                ShadowDepth="0"
+                                Opacity="0.3" />
+            </Setter.Value>
+          </Setter>
+          <DataTrigger.EnterActions>
+            <BeginStoryboard Name="FocusedCardPulse">
+              <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                To="#1C3327"
+                                Duration="0:0:1.65"
+                                EasingFunction="{StaticResource LedEase}" />
+                <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                To="#7EF3AF"
+                                Duration="0:0:1.65"
+                                EasingFunction="{StaticResource LedEase}" />
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+          <DataTrigger.ExitActions>
+            <RemoveStoryboard BeginStoryboardName="FocusedCardPulse" />
+          </DataTrigger.ExitActions>
         </DataTrigger>
       </Style.Triggers>
     </Style>
@@ -322,6 +420,27 @@
         <DataTrigger Binding="{Binding IsFocused}" Value="True">
           <Setter Property="Fill" Value="#7AF7B2" />
           <Setter Property="Stroke" Value="#D7FFE8" />
+          <DataTrigger.EnterActions>
+            <BeginStoryboard Name="FocusedLedPulse">
+              <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                <ColorAnimation Storyboard.TargetProperty="(Ellipse.Fill).(SolidColorBrush.Color)"
+                                To="#45D483"
+                                Duration="0:0:1.45"
+                                EasingFunction="{StaticResource LedEase}" />
+                <ColorAnimation Storyboard.TargetProperty="(Ellipse.Stroke).(SolidColorBrush.Color)"
+                                To="#FFFFFF"
+                                Duration="0:0:1.45"
+                                EasingFunction="{StaticResource LedEase}" />
+                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                 To="0.78"
+                                 Duration="0:0:1.45"
+                                 EasingFunction="{StaticResource LedEase}" />
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+          <DataTrigger.ExitActions>
+            <RemoveStoryboard BeginStoryboardName="FocusedLedPulse" />
+          </DataTrigger.ExitActions>
         </DataTrigger>
       </Style.Triggers>
     </Style>
@@ -380,7 +499,7 @@
                 <TextBlock Text="{Binding WindowStatusText}" Foreground="{StaticResource TextBrush}" FontWeight="SemiBold" Style="{StaticResource StatusPillTextStyle}" />
               </Border>
               <Border Style="{StaticResource AiPill}" Margin="0,0,6,0" ToolTip="{Binding AiStatusDetail}">
-                <TextBlock Text="{Binding AiStatusText}" Foreground="{StaticResource MutedTextBrush}" Style="{StaticResource StatusPillTextStyle}" />
+                <TextBlock Text="{Binding AiStatusText}" Style="{StaticResource AiPillTextStyle}" />
               </Border>
             </WrapPanel>
 
