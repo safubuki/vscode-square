@@ -264,11 +264,11 @@
     <Style x:Key="AiPill" TargetType="Border" BasedOn="{StaticResource TinyPill}">
       <Style.Triggers>
         <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Running}">
-          <Setter Property="Background" Value="#123044" />
-          <Setter Property="BorderBrush" Value="#2DA8E8" />
+          <Setter Property="Background" Value="#123222" />
+          <Setter Property="BorderBrush" Value="#287B4A" />
           <Setter Property="Effect">
             <Setter.Value>
-              <DropShadowEffect Color="#2DA8E8"
+              <DropShadowEffect Color="#45D483"
                                 BlurRadius="9"
                                 ShadowDepth="0"
                                 Opacity="0.42" />
@@ -278,11 +278,11 @@
             <BeginStoryboard Name="AiRunningPulse">
               <Storyboard RepeatBehavior="Forever" AutoReverse="True">
                 <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                To="#19536D"
+                                To="#17482F"
                                 Duration="0:0:0.68"
                                 EasingFunction="{StaticResource LedEase}" />
                 <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                To="#5BD0FF"
+                                To="#45D483"
                                 Duration="0:0:0.68"
                                 EasingFunction="{StaticResource LedEase}" />
                 <DoubleAnimation Storyboard.TargetProperty="Opacity"
@@ -297,11 +297,11 @@
           </DataTrigger.ExitActions>
         </DataTrigger>
         <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Completed}">
-          <Setter Property="Background" Value="#123222" />
-          <Setter Property="BorderBrush" Value="#287B4A" />
+          <Setter Property="Background" Value="#123044" />
+          <Setter Property="BorderBrush" Value="#2DA8E8" />
           <Setter Property="Effect">
             <Setter.Value>
-              <DropShadowEffect Color="#45D483"
+              <DropShadowEffect Color="#2DA8E8"
                                 BlurRadius="10"
                                 ShadowDepth="0"
                                 Opacity="0.36" />
@@ -311,11 +311,11 @@
             <BeginStoryboard Name="AiCompletedPulse">
               <Storyboard RepeatBehavior="Forever" AutoReverse="True">
                 <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
-                                To="#17482F"
+                                To="#19536D"
                                 Duration="0:0:2.1"
                                 EasingFunction="{StaticResource LedEase}" />
                 <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
-                                To="#45D483"
+                                To="#5BD0FF"
                                 Duration="0:0:2.1"
                                 EasingFunction="{StaticResource LedEase}" />
                 <DoubleAnimation Storyboard.TargetProperty="Opacity"
