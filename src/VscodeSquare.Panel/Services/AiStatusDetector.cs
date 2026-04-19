@@ -8,7 +8,7 @@ namespace VscodeSquare.Panel.Services;
 public sealed class AiStatusDetector
 {
     private static readonly TimeSpan ErrorSignalWindow = TimeSpan.FromMinutes(3);
-    private static readonly TimeSpan CodexStreamQuietCompletionWindow = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan CodexStreamQuietCompletionWindow = TimeSpan.FromSeconds(10);
     private const int MaxRecentLogBytes = 96 * 1024;
     private readonly DateTimeOffset _startedAt = DateTimeOffset.Now;
     private readonly VscodeChatUiStatusReader _uiStatusReader = new();
@@ -29,8 +29,9 @@ public sealed class AiStatusDetector
             [],
             [],
             CodexStreamQuietCompletionWindow,
-            ["commandExecution/requestApproval", "ephemeral-generation"],
-            ["thread-stream-state-changed"]),
+            ["ephemeral-generation"],
+            ["thread-stream-state-changed"],
+            ["commandExecution/requestApproval"]),
         new(
             "Copilot",
             ["GitHub.copilot-chat", "github.copilot-chat"],
@@ -41,6 +42,7 @@ public sealed class AiStatusDetector
             ["Latest entry:", " | markdown", " | success |", " | cancelled |", " | networkError |"],
             [" | networkError |"],
             null,
+            [],
             [],
             [])
     ];
@@ -73,6 +75,11 @@ public sealed class AiStatusDetector
         {
             _lastRunningSeenBySlot[slotKey] = now;
             _completedAtBySlot.TryRemove(slotKey, out _);
+            return uiEvidence;
+        }
+
+        if (uiEvidence is { Status: AiStatus.WaitingForConfirmation })
+        {
             return uiEvidence;
         }
 
@@ -339,6 +346,13 @@ public sealed class AiStatusDetector
                     continue;
                 }
 
+                if (source.ConfirmationSignals.Length > 0
+                    && source.ConfirmationSignals.Any(signal => line.Contains(signal, StringComparison.OrdinalIgnoreCase)))
+                {
+                    evidence = evidence with { LastConfirmationSignalAt = Max(evidence.LastConfirmationSignalAt, timestamp) };
+                    continue;
+                }
+
                 if (source.IdleSignals.Any(signal => line.Contains(signal, StringComparison.OrdinalIgnoreCase)))
                 {
                     evidence = evidence with { LastIdleSignalAt = Max(evidence.LastIdleSignalAt, timestamp) };
@@ -433,6 +447,15 @@ public sealed class AiStatusDetector
                 return new AiStatusSnapshot(AiStatus.Completed, $"{evidence.SourceName}: {completedAt:HH:mm:ss} に完了イベントを検出しました。", completedAt);
             }
 
+            if (evidence.LastConfirmationSignalAt is { } confirmAt && confirmAt >= runningAt)
+            {
+                var resumedAfterConfirm = evidence.LastActivitySignalAt.HasValue && evidence.LastActivitySignalAt.Value > confirmAt;
+                if (!resumedAfterConfirm)
+                {
+                    return new AiStatusSnapshot(AiStatus.WaitingForConfirmation, $"{evidence.SourceName}: {confirmAt:HH:mm:ss} にユーザー確認待ちを検出しました。", confirmAt);
+                }
+            }
+
             if (evidence.RunningSignalQuietCompletionWindow is { } quietWindow)
             {
                 var lastActiveAt = runningAt;
@@ -474,7 +497,8 @@ public sealed class AiStatusDetector
         string[] ErrorSignals,
         TimeSpan? RunningSignalQuietCompletionWindow,
         string[] SecondaryRunningSignals,
-        string[] ActivitySignals);
+        string[] ActivitySignals,
+        string[] ConfirmationSignals);
 
     private readonly record struct AiLogEvidence(
         string SourceName,
@@ -485,14 +509,15 @@ public sealed class AiStatusDetector
         DateTimeOffset? LastErrorSignalAt,
         DateTimeOffset? LastIdleSignalAt,
         DateTimeOffset? LastSecondaryRunningSignalAt,
-        DateTimeOffset? LastActivitySignalAt)
+        DateTimeOffset? LastActivitySignalAt,
+        DateTimeOffset? LastConfirmationSignalAt)
     {
         public static AiLogEvidence Empty(ExtensionLogSource source)
         {
             return new AiLogEvidence(
                 source.DisplayName,
                 source.RunningSignalQuietCompletionWindow,
-                null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
         }
     }
 }

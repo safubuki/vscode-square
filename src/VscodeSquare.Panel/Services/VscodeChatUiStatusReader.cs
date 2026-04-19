@@ -59,6 +59,12 @@ public sealed class VscodeChatUiStatusReader
         "codicon-circle-slash"
     ];
 
+    private static readonly string[] ConfirmationActionTexts =
+    [
+        "Continue",
+        "続行"
+    ];
+
     public AiStatusSnapshot? TryRead(WindowSlot slot)
     {
         return TryRead(slot.WindowHandle);
@@ -105,6 +111,8 @@ public sealed class VscodeChatUiStatusReader
         queue.Enqueue(root);
 
         var inspected = 0;
+        AiStatusSnapshot? confirmationResult = null;
+
         while (queue.Count > 0 && inspected < MaxElementsToInspect)
         {
             var element = queue.Dequeue();
@@ -115,10 +123,15 @@ public sealed class VscodeChatUiStatusReader
                 return new AiStatusSnapshot(AiStatus.Running, detail, DateTimeOffset.Now);
             }
 
+            if (confirmationResult is null && TryReadConfirmationSignal(element, out var confirmDetail))
+            {
+                confirmationResult = new AiStatusSnapshot(AiStatus.WaitingForConfirmation, confirmDetail, DateTimeOffset.Now);
+            }
+
             EnqueueChildren(walker, element, queue);
         }
 
-        return null;
+        return confirmationResult;
     }
 
     private static void EnqueueChildren(
@@ -242,6 +255,33 @@ public sealed class VscodeChatUiStatusReader
     private static bool ContainsStopAction(string value)
     {
         return StopActionTexts.Any(signal => value.Contains(signal, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool TryReadConfirmationSignal(AutomationElement element, out string detail)
+    {
+        var name = GetStringProperty(element, AutomationElement.NameProperty);
+        var automationId = GetStringProperty(element, AutomationElement.AutomationIdProperty);
+        var className = GetStringProperty(element, AutomationElement.ClassNameProperty);
+        var combinedContext = $"{automationId} {className}";
+
+        if (IsVisible(element)
+            && IsEnabled(element)
+            && ContainsAny(combinedContext, ChatContextFragments)
+            && ContainsConfirmationAction(name))
+        {
+            detail = string.IsNullOrWhiteSpace(name)
+                ? "VS Code UI: チャット確認ボタンを検出しました。"
+                : $"VS Code UI: {TrimForDetail(name)} を検出しました。";
+            return true;
+        }
+
+        detail = string.Empty;
+        return false;
+    }
+
+    private static bool ContainsConfirmationAction(string value)
+    {
+        return ConfirmationActionTexts.Any(signal => value.Contains(signal, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool ContainsAny(string value, IEnumerable<string> fragments)
