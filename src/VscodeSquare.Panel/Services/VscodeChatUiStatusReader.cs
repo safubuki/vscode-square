@@ -62,7 +62,9 @@ public sealed class VscodeChatUiStatusReader
     private static readonly string[] ConfirmationActionTexts =
     [
         "Continue",
-        "続行"
+        "続行",
+        "Allow",
+        "許可"
     ];
 
     public AiStatusSnapshot? TryRead(WindowSlot slot)
