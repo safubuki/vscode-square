@@ -353,7 +353,13 @@ public partial class MainWindow : Window
                 _statusStore.AssignWindow(assignment.Slot, assignment.Window);
             }
 
+            await RefreshSlotsAsync(allowDuringBusy: true);
             ArrangeSlotsOnActiveMonitor();
+
+            // VS Code が起動直後にウィンドウ位置を自己復元するケースに備えて再配置する
+            await Task.Delay(500);
+            ArrangeSlotsOnActiveMonitor();
+
             _statusStore.Message = assignments.Count > 0
                 ? swappedVisiblePanel
                     ? $"{storedPanel.Label}をスロット{targetSlot.Name}へ表示し、元の内容は裏保存に戻しました。"
