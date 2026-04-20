@@ -1,4 +1,4 @@
-# Turtle App Launch Quartet 実装計画書
+# Turtle AI Quartet Hub 実装計画書
 
 作成日: 2026-04-14
 
@@ -84,7 +84,7 @@ Windowsデスクトップ上で複数のVS Codeウィンドウを扱いやすく
 
 ```text
 +--------------------------+
-| Turtle App Launch Quartet Panel |
+| Turtle AI Quartet Hub Panel |
 | WPF / .NET               |
 |                          |
 | - Launch 4 VS Code       |

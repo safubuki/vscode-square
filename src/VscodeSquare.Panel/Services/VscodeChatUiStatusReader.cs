@@ -67,6 +67,15 @@ public sealed class VscodeChatUiStatusReader
         "許可"
     ];
 
+    private static readonly string[] ConfirmationContextFragments =
+    [
+        "chat",
+        "copilot",
+        "codex",
+        "agent",
+        "interactive"
+    ];
+
     public AiStatusSnapshot? TryRead(WindowSlot slot)
     {
         return TryRead(slot.WindowHandle);
@@ -268,8 +277,8 @@ public sealed class VscodeChatUiStatusReader
 
         if (IsVisible(element)
             && IsEnabled(element)
-            && ContainsAny(combinedContext, ChatContextFragments)
-            && ContainsConfirmationAction(name))
+            && ContainsAny(combinedContext, ConfirmationContextFragments)
+            && IsConfirmationActionName(name))
         {
             detail = string.IsNullOrWhiteSpace(name)
                 ? "VS Code UI: チャット確認ボタンを検出しました。"
@@ -281,9 +290,24 @@ public sealed class VscodeChatUiStatusReader
         return false;
     }
 
-    private static bool ContainsConfirmationAction(string value)
+    private static bool IsConfirmationActionName(string value)
     {
-        return ConfirmationActionTexts.Any(signal => value.Contains(signal, StringComparison.OrdinalIgnoreCase));
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0 || trimmed.Length > MaxTextLengthForStatus)
+        {
+            return false;
+        }
+
+        // Exclude debug keybinding patterns like "Continue (F5)", "続行 (F5)"
+        if (trimmed.Contains("(F", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return ConfirmationActionTexts.Any(signal =>
+            string.Equals(trimmed, signal, StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith($"{signal} ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith($"{signal}(", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool ContainsAny(string value, IEnumerable<string> fragments)

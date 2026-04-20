@@ -1,6 +1,6 @@
-# Turtle App Launch Quartet
+# Turtle AI Quartet Hub
 
-Turtle App Launch Quartet は、4つの VS Code ウィンドウをスロット A-D として起動し、2x2 に配置する Windows 向けの小さな WPF パネルです。
+Turtle AI Quartet Hub は、4つの VS Code ウィンドウをスロット A-D として起動し、2x2 に配置する Windows 向けの小さな WPF パネルです。
 
 ## 機能
 
