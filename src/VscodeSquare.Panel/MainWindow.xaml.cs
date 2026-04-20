@@ -868,6 +868,21 @@ public partial class MainWindow : Window
         MinHeight = targetMinHeight;
     }
 
+    private void Window_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Keyboard.FocusedElement is not TextBox textBox || textBox.IsReadOnly)
+        {
+            return;
+        }
+
+        if (IsSelfOrChild(e.OriginalSource as DependencyObject, textBox))
+        {
+            return;
+        }
+
+        FinishInlineTitleTextBoxEdit(textBox, commit: true, clearKeyboardFocus: true);
+    }
+
     private void InlineTitleTextBox_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (sender is not TextBox textBox || e.Key is not (Key.Return or Key.Enter or Key.Escape))
@@ -875,19 +890,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (e.Key == Key.Escape)
-        {
-            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateTarget();
-        }
-        else
-        {
-            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
-        }
-
-        textBox.IsReadOnly = true;
-        textBox.Focusable = false;
-        textBox.Cursor = Cursors.Arrow;
-        Keyboard.ClearFocus();
+        FinishInlineTitleTextBoxEdit(textBox, commit: e.Key != Key.Escape, clearKeyboardFocus: true);
         e.Handled = true;
     }
 
@@ -916,10 +919,43 @@ public partial class MainWindow : Window
             return;
         }
 
-        textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        FinishInlineTitleTextBoxEdit(textBox, commit: true, clearKeyboardFocus: false);
+    }
+
+    private static void FinishInlineTitleTextBoxEdit(TextBox textBox, bool commit, bool clearKeyboardFocus)
+    {
+        if (commit)
+        {
+            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        }
+        else
+        {
+            textBox.GetBindingExpression(TextBox.TextProperty)?.UpdateTarget();
+        }
+
         textBox.IsReadOnly = true;
         textBox.Focusable = false;
         textBox.Cursor = Cursors.Arrow;
+
+        if (clearKeyboardFocus)
+        {
+            Keyboard.ClearFocus();
+        }
+    }
+
+    private static bool IsSelfOrChild(DependencyObject? source, DependencyObject target)
+    {
+        while (source is not null)
+        {
+            if (ReferenceEquals(source, target))
+            {
+                return true;
+            }
+
+            source = GetUiParent(source);
+        }
+
+        return false;
     }
 
     private static bool IsInteractiveCardChild(DependencyObject? source)
@@ -936,10 +972,27 @@ public partial class MainWindow : Window
                 return true;
             }
 
-            source = VisualTreeHelper.GetParent(source);
+            source = GetUiParent(source);
         }
 
         return false;
+    }
+
+    private static DependencyObject? GetUiParent(DependencyObject source)
+    {
+        if (source is FrameworkContentElement contentElement)
+        {
+            return contentElement.Parent;
+        }
+
+        try
+        {
+            return VisualTreeHelper.GetParent(source);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
     }
 
     private int GetActiveMonitorIndex()

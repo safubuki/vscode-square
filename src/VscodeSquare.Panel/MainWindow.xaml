@@ -19,7 +19,8 @@
         UseLayoutRounding="True"
         SnapsToDevicePixels="True"
         TextOptions.TextFormattingMode="Display"
-        Icon="app.ico">
+        Icon="app.ico"
+        PreviewMouseDown="Window_PreviewMouseDown">
   <shell:WindowChrome.WindowChrome>
     <shell:WindowChrome CaptionHeight="34"
                         ResizeBorderThickness="8"
@@ -653,7 +654,8 @@
 
             <TextBlock Grid.Column="1"
                        Text="{Binding DisplayTitle}"
-                     Margin="0,0,6,0"
+                       ToolTip="{Binding DisplayTitle}"
+                       Margin="0,0,6,0"
                        FontWeight="SemiBold"
                        VerticalAlignment="Center" />
 

@@ -17,7 +17,7 @@ public sealed class StoredPanelSlot : INotifyPropertyChanged
 
     public int Index { get; }
 
-    public string Label => $"裏{Index}";
+    public string Label => Index.ToString();
 
     public string PanelTitle
     {
