@@ -926,6 +926,11 @@
     </DataTemplate>
   </Window.Resources>
 
+  <Border x:Name="PanelFrameBorder"
+          Background="Transparent"
+          BorderBrush="Transparent"
+          BorderThickness="0"
+          CornerRadius="0">
   <Grid x:Name="RootLayoutGrid" Background="{StaticResource PanelBackgroundBrush}" Margin="8">
     <Grid.RowDefinitions>
       <RowDefinition Height="26" />
@@ -1265,4 +1270,5 @@
       </Grid>
     </Border>
   </Grid>
+  </Border>
 </Window>

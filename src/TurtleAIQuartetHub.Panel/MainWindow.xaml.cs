@@ -4,6 +4,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using TurtleAIQuartetHub.Panel.Models;
 using TurtleAIQuartetHub.Panel.Services;
@@ -40,6 +41,7 @@ public partial class MainWindow : Window
     private StoredPanelSlot? _pendingStoredPanelDeletion;
     private Point _dragStartPoint;
     private CancellationTokenSource? _panelFrontRestoreCancellation;
+    private CancellationTokenSource? _panelLocateCancellation;
     private CompactRoundTripState? _compactRoundTripState;
     private bool _compactRoundTripEligible;
     private bool _suppressPanelLocationTracking;
@@ -72,11 +74,22 @@ public partial class MainWindow : Window
             await RefreshSlotsAsync(allowDuringBusy: true);
             ApplyManagedWindowLayers();
             UpdateWindowHeightForStoredPanels(StoredPanelsExpander.IsExpanded, true);
+            UpdateCompactPanelFrame();
             RefreshAuxiliaryUi();
         };
     }
 
     private async void LaunchButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isBusy)
+        {
+            return;
+        }
+
+        await LaunchAllMissingAsync();
+    }
+
+    private async Task LaunchAllMissingAsync()
     {
         if (_isBusy)
         {
@@ -166,6 +179,10 @@ public partial class MainWindow : Window
             case "--activate":
                 break;
 
+            case "--locate":
+                await LocatePanelAsync();
+                break;
+
             case "--slot-toggle" when args.Length >= 2:
             {
                 var slot = _statusStore.FindSlot(args[1]);
@@ -179,6 +196,10 @@ public partial class MainWindow : Window
 
             case "--mode" when args.Length >= 2:
                 SetCompactMode(string.Equals(args[1], "compact", StringComparison.OrdinalIgnoreCase));
+                break;
+
+            case "--launch-all":
+                await LaunchAllMissingAsync();
                 break;
 
             case "--layer" when args.Length >= 2 && string.Equals(args[1], "top", StringComparison.OrdinalIgnoreCase):
@@ -958,6 +979,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!compact)
+        {
+            StopPanelLocateBlink();
+            ClearCompactPanelFrame();
+            Dispatcher.Invoke(static () => { }, DispatcherPriority.Render);
+        }
+
         if (compact)
         {
             RememberStandardWindowMetrics();
@@ -1011,6 +1039,7 @@ public partial class MainWindow : Window
         }
 
         UpdateDisplayModeChrome();
+        UpdateCompactPanelFrame();
         RefreshAuxiliaryUi();
 
         if (updateMessage)
@@ -1098,6 +1127,86 @@ public partial class MainWindow : Window
     {
         return Math.Abs(current.Left - expected.Left) <= 1
             && Math.Abs(current.Top - expected.Top) <= 1;
+    }
+
+    private async Task LocatePanelAsync()
+    {
+        if (!_isCompactMode)
+        {
+            return;
+        }
+
+        ActivatePanelWindow();
+        StopPanelLocateBlink();
+
+        var cancellation = new CancellationTokenSource();
+        _panelLocateCancellation = cancellation;
+
+        try
+        {
+            var endAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(5);
+            var emphasis = true;
+            while (DateTimeOffset.UtcNow < endAt && !cancellation.IsCancellationRequested)
+            {
+                UpdateCompactPanelFrame(emphasis ? PanelFrameVisual.Emphasis : PanelFrameVisual.Dimmed);
+                emphasis = !emphasis;
+                await Task.Delay(260, cancellation.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            if (ReferenceEquals(_panelLocateCancellation, cancellation))
+            {
+                _panelLocateCancellation = null;
+            }
+
+            cancellation.Dispose();
+            UpdateCompactPanelFrame();
+        }
+    }
+
+    private void StopPanelLocateBlink()
+    {
+        _panelLocateCancellation?.Cancel();
+        _panelLocateCancellation?.Dispose();
+        _panelLocateCancellation = null;
+    }
+
+    private void UpdateCompactPanelFrame(PanelFrameVisual visual = PanelFrameVisual.Normal)
+    {
+        if (!_isCompactMode)
+        {
+            ClearCompactPanelFrame();
+            return;
+        }
+
+        var color = visual switch
+        {
+            PanelFrameVisual.Emphasis => (Color)ColorConverter.ConvertFromString("#8AFCB7"),
+            PanelFrameVisual.Dimmed => (Color)ColorConverter.ConvertFromString("#1F8E54"),
+            _ => (Color)ColorConverter.ConvertFromString("#45D483")
+        };
+
+        var borderOpacity = visual switch
+        {
+            PanelFrameVisual.Emphasis => 1.0,
+            PanelFrameVisual.Dimmed => 0.36,
+            _ => 0.82
+        };
+
+        PanelFrameBorder.BorderBrush = new SolidColorBrush(color) { Opacity = borderOpacity };
+        PanelFrameBorder.BorderThickness = new Thickness(1.5);
+        PanelFrameBorder.Effect = null;
+    }
+
+    private void ClearCompactPanelFrame()
+    {
+        PanelFrameBorder.BorderBrush = Brushes.Transparent;
+        PanelFrameBorder.BorderThickness = new Thickness(0);
+        PanelFrameBorder.Effect = null;
     }
 
     private WindowArranger.WindowBounds GetStandardModeRestoreBounds(double targetWidth, double targetHeight)
@@ -1496,6 +1605,7 @@ public partial class MainWindow : Window
         _refreshCancellation.Cancel();
         _panelFrontRestoreCancellation?.Cancel();
         _panelFrontRestoreCancellation?.Dispose();
+        StopPanelLocateBlink();
         _overlayManager.Dispose();
         base.OnClosed(e);
     }
@@ -1538,4 +1648,11 @@ public partial class MainWindow : Window
     private readonly record struct CompactRoundTripState(
         WindowArranger.WindowBounds CompactBounds,
         WindowArranger.WindowBounds StandardBounds);
+
+    private enum PanelFrameVisual
+    {
+        Normal,
+        Dimmed,
+        Emphasis
+    }
 }

@@ -17,12 +17,14 @@ public static class TaskbarJumpListService
             return;
         }
 
-        var visibleSlots = slots
-            .Take(4)
+        var managedSlots = slots.Take(4).ToList();
+        var visibleSlots = managedSlots
             .Where(slot => slot.WindowStatus != SlotWindowStatus.Missing)
             .ToList();
+        var allSlotsStopped = managedSlots.Count > 0
+            && managedSlots.All(slot => slot.WindowStatus == SlotWindowStatus.Missing);
 
-        var signature = BuildSignature(visibleSlots, compactMode, isActiveMenu: true);
+        var signature = BuildSignature(managedSlots, compactMode, isActiveMenu: true);
         if (string.Equals(signature, _lastSignature, StringComparison.Ordinal))
         {
             return;
@@ -37,54 +39,49 @@ public static class TaskbarJumpListService
                 jumpList.JumpItems.Add(new JumpTask
                 {
                     Title = BuildSlotTitle(slot),
-                    Description = $"スロット{slot.Name}を切り替えます。",
+                    Description = $"スロット {slot.Name} の VS Code を切り替えます。",
                     Arguments = $"--slot-toggle {slot.Name}",
                     ApplicationPath = appPath,
                     IconResourcePath = appPath,
                     CustomCategory = "スロット"
                 });
             }
-
+        }
+        else if (allSlotsStopped)
+        {
             jumpList.JumpItems.Add(new JumpTask
             {
-                Title = compactMode ? "標準表示に戻す" : "縮小表示にする",
-                Description = "パネルの表示モードを切り替えます。",
-                Arguments = compactMode ? "--mode standard" : "--mode compact",
+                Title = "VS Code を一括起動",
+                Description = "管理する 4 スロットの VS Code をまとめて起動します。",
+                Arguments = "--launch-all",
                 ApplicationPath = appPath,
                 IconResourcePath = appPath,
-                CustomCategory = "表示"
-            });
-
-            jumpList.JumpItems.Add(new JumpTask
-            {
-                Title = "VS Code を前面へ",
-                Description = "管理中の VS Code を前面に寄せます。",
-                Arguments = "--layer top",
-                ApplicationPath = appPath,
-                IconResourcePath = appPath,
-                CustomCategory = "配置"
-            });
-
-            jumpList.JumpItems.Add(new JumpTask
-            {
-                Title = "VS Code を背面へ",
-                Description = "管理中の VS Code を背面へ送ります。",
-                Arguments = "--layer back",
-                ApplicationPath = appPath,
-                IconResourcePath = appPath,
-                CustomCategory = "配置"
+                CustomCategory = "起動"
             });
         }
 
         jumpList.JumpItems.Add(new JumpTask
         {
-            Title = "パネルを表示",
-            Description = "Turtle AI Quartet Hub を前面に表示します。",
-            Arguments = "--activate",
+            Title = compactMode ? "標準表示に戻す" : "縮小表示にする",
+            Description = "パネルの表示モードを切り替えます。",
+            Arguments = compactMode ? "--mode standard" : "--mode compact",
             ApplicationPath = appPath,
             IconResourcePath = appPath,
-            CustomCategory = visibleSlots.Count > 0 ? "パネル" : "起動"
+            CustomCategory = "表示"
         });
+
+        if (compactMode)
+        {
+            jumpList.JumpItems.Add(new JumpTask
+            {
+                Title = "アプリを探す",
+                Description = "縮小表示のパネル位置を点滅で知らせます。",
+                Arguments = "--locate",
+                ApplicationPath = appPath,
+                IconResourcePath = appPath,
+                CustomCategory = "表示"
+            });
+        }
 
         Apply(jumpList, signature);
     }
@@ -106,8 +103,8 @@ public static class TaskbarJumpListService
         var jumpList = CreateBaseJumpList();
         jumpList.JumpItems.Add(new JumpTask
         {
-            Title = "パネルを起動",
-            Description = "Turtle AI Quartet Hub を起動します。",
+            Title = "Turtle AI Quartet Hub を起動",
+            Description = "アプリが起動していないときに Turtle AI Quartet Hub を開きます。",
             Arguments = "--activate",
             ApplicationPath = appPath,
             IconResourcePath = appPath,
@@ -182,7 +179,7 @@ public static class TaskbarJumpListService
             AiStatus.Completed => "完了",
             AiStatus.WaitingForConfirmation => "確認中",
             AiStatus.Error => "エラー",
-            AiStatus.NeedsAttention => "要確認",
+            AiStatus.NeedsAttention => "要対応",
             _ => slot.WindowStatus == SlotWindowStatus.Launching ? "起動中" : "待機"
         };
 
