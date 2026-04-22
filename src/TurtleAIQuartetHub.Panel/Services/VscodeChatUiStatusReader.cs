@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Windows.Automation;
 using TurtleAIQuartetHub.Panel.Models;
 
@@ -15,7 +15,6 @@ public sealed class VscodeChatUiStatusReader
         "実行中",
         "処理中",
         "生成中",
-        "思考中",
         "考え中",
         "Working",
         "Running",
@@ -185,12 +184,11 @@ public sealed class VscodeChatUiStatusReader
         }
 
         if (isVisible
-            && IsButtonControl(element)
             && IsEnabled(element)
             && ContainsAny(combinedContext, ChatContextFragments)
             && (ContainsAny(className, StopClassFragments)
                 || ContainsAny(combinedContext, StopClassFragments)
-                || MatchesStopActionName(name)))
+                || ContainsStopAction(name)))
         {
             detail = string.IsNullOrWhiteSpace(name)
                 ? "VS Code UI: チャット停止ボタンを検出しました。"
@@ -263,18 +261,9 @@ public sealed class VscodeChatUiStatusReader
             || RunningStatusPrefixes.Any(signal => normalized.StartsWith(signal, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool MatchesStopActionName(string value)
+    private static bool ContainsStopAction(string value)
     {
-        var trimmed = value.Trim();
-        if (trimmed.Length == 0 || trimmed.Length > MaxTextLengthForStatus)
-        {
-            return false;
-        }
-
-        return StopActionTexts.Any(signal =>
-            string.Equals(trimmed, signal, StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith($"{signal} ", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith($"{signal}(", StringComparison.OrdinalIgnoreCase));
+        return StopActionTexts.Any(signal => value.Contains(signal, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool TryReadConfirmationSignal(AutomationElement element, out string detail)
@@ -340,27 +329,6 @@ public sealed class VscodeChatUiStatusReader
         catch (COMException)
         {
             return string.Empty;
-        }
-    }
-
-    private static bool IsButtonControl(AutomationElement element)
-    {
-        try
-        {
-            var controlType = element.GetCurrentPropertyValue(AutomationElement.ControlTypeProperty, true);
-            return controlType is ControlType current && current == ControlType.Button;
-        }
-        catch (ElementNotAvailableException)
-        {
-            return false;
-        }
-        catch (InvalidOperationException)
-        {
-            return false;
-        }
-        catch (COMException)
-        {
-            return false;
         }
     }
 
