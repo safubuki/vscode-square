@@ -269,6 +269,38 @@ public sealed class WindowArranger
         return true;
     }
 
+    public bool TryGetMonitorWorkAreaForWindow(IntPtr windowHandle, out WindowBounds workAreaBounds)
+    {
+        workAreaBounds = default;
+        if (windowHandle == IntPtr.Zero || !IsWindow(windowHandle))
+        {
+            return false;
+        }
+
+        var monitorHandle = MonitorFromWindow(windowHandle, MONITOR_DEFAULTTONEAREST);
+        if (monitorHandle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        var info = new MONITORINFO
+        {
+            cbSize = Marshal.SizeOf<MONITORINFO>()
+        };
+
+        if (!GetMonitorInfo(monitorHandle, ref info))
+        {
+            return false;
+        }
+
+        workAreaBounds = new WindowBounds(
+            info.rcWork.Left,
+            info.rcWork.Top,
+            Math.Max(0, info.rcWork.Right - info.rcWork.Left),
+            Math.Max(0, info.rcWork.Bottom - info.rcWork.Top));
+        return true;
+    }
+
     public bool PositionOverlayAbove(IntPtr overlayHandle, IntPtr targetHandle, WindowBounds bounds)
     {
         if (overlayHandle == IntPtr.Zero

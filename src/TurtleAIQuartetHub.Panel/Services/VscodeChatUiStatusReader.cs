@@ -185,11 +185,12 @@ public sealed class VscodeChatUiStatusReader
         }
 
         if (isVisible
+            && IsButtonControl(element)
             && IsEnabled(element)
             && ContainsAny(combinedContext, ChatContextFragments)
             && (ContainsAny(className, StopClassFragments)
                 || ContainsAny(combinedContext, StopClassFragments)
-                || ContainsStopAction(name)))
+                || MatchesStopActionName(name)))
         {
             detail = string.IsNullOrWhiteSpace(name)
                 ? "VS Code UI: チャット停止ボタンを検出しました。"
@@ -262,9 +263,18 @@ public sealed class VscodeChatUiStatusReader
             || RunningStatusPrefixes.Any(signal => normalized.StartsWith(signal, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool ContainsStopAction(string value)
+    private static bool MatchesStopActionName(string value)
     {
-        return StopActionTexts.Any(signal => value.Contains(signal, StringComparison.OrdinalIgnoreCase));
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0 || trimmed.Length > MaxTextLengthForStatus)
+        {
+            return false;
+        }
+
+        return StopActionTexts.Any(signal =>
+            string.Equals(trimmed, signal, StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith($"{signal} ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith($"{signal}(", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool TryReadConfirmationSignal(AutomationElement element, out string detail)
@@ -330,6 +340,27 @@ public sealed class VscodeChatUiStatusReader
         catch (COMException)
         {
             return string.Empty;
+        }
+    }
+
+    private static bool IsButtonControl(AutomationElement element)
+    {
+        try
+        {
+            var controlType = element.GetCurrentPropertyValue(AutomationElement.ControlTypeProperty, true);
+            return controlType is ControlType current && current == ControlType.Button;
+        }
+        catch (ElementNotAvailableException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (COMException)
+        {
+            return false;
         }
     }
 

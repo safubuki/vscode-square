@@ -12,11 +12,12 @@ namespace TurtleAIQuartetHub.Panel;
 
 public partial class MainWindow : Window
 {
-    private const double CompactWindowHeight = 84;
-    private const double CompactWindowMinHeight = 84;
-    private const double CompactWindowMinWidth = 396;
-    private const double CompactWindowWidthScale = 0.67;
-    private static readonly TimeSpan PanelFrontRestoreDelay = TimeSpan.FromMilliseconds(120);
+    private const double CompactWindowMinHeight = 72;
+    private const double CompactWindowMinWidth = 320;
+    private const double CompactWindowWidthScale = 0.58;
+    private const string CompactModeGlyph = "\uE73F";
+    private const string StandardModeGlyph = "\uE740";
+    private static readonly TimeSpan PanelFrontRestoreDelay = TimeSpan.FromMilliseconds(80);
     private readonly WindowEnumerator _windowEnumerator = new();
     private readonly WindowArranger _windowArranger = new();
     private readonly WindowFrameOverlayManager _overlayManager;
@@ -859,8 +860,6 @@ public partial class MainWindow : Window
         {
             slot.WindowLayerMode = layerMode;
         }
-
-        RefreshAuxiliaryUi();
     }
 
     private bool SetManagedWindowLayer(WindowSlot.SlotWindowLayerMode layerMode, bool bringPanelAfterChange = true)
@@ -962,26 +961,30 @@ public partial class MainWindow : Window
         if (compact)
         {
             MinWidth = CompactWindowMinWidth;
-            MinHeight = CompactWindowMinHeight;
             var baseWidth = _standardWindowWidth > 0 ? _standardWindowWidth : Width;
             var compactWidth = Math.Max(CompactWindowMinWidth, Math.Round(baseWidth * CompactWindowWidthScale));
             Width = compactWidth;
-            Height = CompactWindowHeight;
+            UpdateLayout();
+            var compactHeight = GetCompactModeHeight();
+            MinHeight = compactHeight;
+            Height = compactHeight;
         }
         else
         {
             MinWidth = _standardWindowMinWidth > 0 ? _standardWindowMinWidth : MinWidth;
             MinHeight = _standardWindowMinHeight > 0 ? _standardWindowMinHeight : MinHeight;
+            var targetWidth = _standardWindowWidth > 0
+                ? Math.Max(MinWidth, _standardWindowWidth)
+                : Width;
+            var targetHeight = _standardWindowHeight > 0
+                ? Math.Max(MinHeight, _standardWindowHeight)
+                : Height;
+            var targetBounds = GetStandardModeRestoreBounds(targetWidth, targetHeight);
 
-            if (_standardWindowWidth > 0)
-            {
-                Width = Math.Max(MinWidth, _standardWindowWidth);
-            }
-
-            if (_standardWindowHeight > 0)
-            {
-                Height = Math.Max(MinHeight, _standardWindowHeight);
-            }
+            Left = targetBounds.Left;
+            Top = targetBounds.Top;
+            Width = targetBounds.Width;
+            Height = targetBounds.Height;
         }
 
         UpdateDisplayModeChrome();
@@ -997,7 +1000,7 @@ public partial class MainWindow : Window
 
     private void UpdateDisplayModeChrome()
     {
-        DisplayModeButton.Content = _isCompactMode ? "▦" : "▁";
+        DisplayModeButton.Content = _isCompactMode ? StandardModeGlyph : CompactModeGlyph;
         DisplayModeButton.ToolTip = _isCompactMode
             ? "標準表示へ戻す"
             : "縮小表示へ切り替え";
@@ -1014,6 +1017,68 @@ public partial class MainWindow : Window
         _standardWindowHeight = Height;
         _standardWindowMinWidth = MinWidth;
         _standardWindowMinHeight = MinHeight;
+    }
+
+    private double GetCompactModeHeight()
+    {
+        const double titleRowHeight = 26;
+        const double edgePadding = 2;
+        var compactPanelHeight = CompactBarPanel.ActualHeight + CompactBarPanel.Margin.Top + CompactBarPanel.Margin.Bottom;
+        var rootMarginHeight = RootLayoutGrid.Margin.Top + RootLayoutGrid.Margin.Bottom;
+        return Math.Max(CompactWindowMinHeight, Math.Ceiling(titleRowHeight + compactPanelHeight + rootMarginHeight + edgePadding));
+    }
+
+    private WindowArranger.WindowBounds GetStandardModeRestoreBounds(double targetWidth, double targetHeight)
+    {
+        var defaultBounds = new WindowArranger.WindowBounds(
+            (int)Math.Round(Left),
+            (int)Math.Round(Top),
+            (int)Math.Round(targetWidth),
+            (int)Math.Round(targetHeight));
+
+        var panelHandle = new WindowInteropHelper(this).Handle;
+        if (panelHandle == IntPtr.Zero
+            || !_windowArranger.TryGetMonitorWorkAreaForWindow(panelHandle, out var workArea)
+            || !WouldClip(workArea, defaultBounds))
+        {
+            return defaultBounds;
+        }
+
+        var compactRight = Left + Width;
+        var compactBottom = Top + Height;
+        var anchorRight = Left + Width / 2 >= workArea.Left + workArea.Width / 2.0;
+        var anchorBottom = Top + Height / 2 >= workArea.Top + workArea.Height / 2.0;
+
+        var adjustedLeft = anchorRight ? compactRight - targetWidth : Left;
+        var adjustedTop = anchorBottom ? compactBottom - targetHeight : Top;
+        adjustedLeft = ClampToWorkArea(adjustedLeft, workArea.Left, workArea.Width, targetWidth);
+        adjustedTop = ClampToWorkArea(adjustedTop, workArea.Top, workArea.Height, targetHeight);
+
+        return new WindowArranger.WindowBounds(
+            (int)Math.Round(adjustedLeft),
+            (int)Math.Round(adjustedTop),
+            (int)Math.Round(targetWidth),
+            (int)Math.Round(targetHeight));
+    }
+
+    private static bool WouldClip(WindowArranger.WindowBounds workArea, WindowArranger.WindowBounds targetBounds)
+    {
+        return targetBounds.Left < workArea.Left
+            || targetBounds.Top < workArea.Top
+            || targetBounds.Left + targetBounds.Width > workArea.Left + workArea.Width
+            || targetBounds.Top + targetBounds.Height > workArea.Top + workArea.Height;
+    }
+
+    private static double ClampToWorkArea(double value, int workAreaStart, int workAreaLength, double targetLength)
+    {
+        var min = workAreaStart;
+        var max = workAreaStart + Math.Max(0, workAreaLength - targetLength);
+        if (max < min)
+        {
+            return min;
+        }
+
+        return Math.Min(Math.Max(value, min), max);
     }
 
     private void RefreshAuxiliaryUi()

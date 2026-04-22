@@ -10,7 +10,9 @@ public sealed class AiStatusDetector
     private static readonly TimeSpan ErrorSignalWindow = TimeSpan.FromMinutes(3);
     private static readonly TimeSpan CodexStreamQuietCompletionWindow = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RunningStartupGraceWindow = TimeSpan.FromSeconds(3);
-    private static readonly TimeSpan ActivityOnlyRunningStartupGraceWindow = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan ActivityOnlyRunningStartupGraceWindow = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan ActivityOnlyRunningMinimumBurstWindow = TimeSpan.FromSeconds(1.2);
+    private const int ActivityOnlyRunningMinimumSignalCount = 8;
     private const int MaxRecentLogBytes = 192 * 1024;
     private static readonly string[] ExtensionHostDirectoryNames = ["exthost", "remoteexthost", "remoteexhost"];
     private readonly DateTimeOffset _startedAt = DateTimeOffset.Now;
@@ -441,6 +443,7 @@ public sealed class AiStatusDetector
                 {
                     evidence = evidence with
                     {
+                        FirstActivitySignalAt = evidence.FirstActivitySignalAt ?? timestamp,
                         LastActivitySignalAt = Max(evidence.LastActivitySignalAt, timestamp),
                         ActivitySignalCount = evidence.ActivitySignalCount + 1
                     };
@@ -584,8 +587,10 @@ public sealed class AiStatusDetector
         }
 
         if (evidence.RunningSignalQuietCompletionWindow is { } activityQuietWindow
+            && evidence.FirstActivitySignalAt is { } firstActivityAt
             && evidence.LastActivitySignalAt is { } activityOnlyAt
-            && evidence.ActivitySignalCount >= 3
+            && evidence.ActivitySignalCount >= ActivityOnlyRunningMinimumSignalCount
+            && activityOnlyAt - firstActivityAt >= ActivityOnlyRunningMinimumBurstWindow
             && now - slotStartedAt >= ActivityOnlyRunningStartupGraceWindow
             && now - activityOnlyAt <= activityQuietWindow
             && (!evidence.LastCompletionSignalAt.HasValue || evidence.LastCompletionSignalAt.Value < activityOnlyAt))
@@ -632,6 +637,7 @@ public sealed class AiStatusDetector
         DateTimeOffset? LastCompletionSignalAt,
         DateTimeOffset? LastErrorSignalAt,
         DateTimeOffset? LastIdleSignalAt,
+        DateTimeOffset? FirstActivitySignalAt,
         DateTimeOffset? LastSecondaryRunningSignalAt,
         DateTimeOffset? LastActivitySignalAt,
         DateTimeOffset? LastConfirmationSignalAt,
@@ -642,7 +648,7 @@ public sealed class AiStatusDetector
             return new AiLogEvidence(
                 source.DisplayName,
                 source.RunningSignalQuietCompletionWindow,
-                null, null, null, null, null, null, null, null, 0);
+                null, null, null, null, null, null, null, null, null, 0);
         }
     }
 }

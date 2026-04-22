@@ -55,6 +55,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        TaskbarJumpListService.SetInactiveMenu();
         _singleInstanceCoordinator?.Dispose();
         base.OnExit(e);
     }
