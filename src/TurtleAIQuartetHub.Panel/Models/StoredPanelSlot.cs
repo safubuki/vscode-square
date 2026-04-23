@@ -125,3 +125,18 @@ public sealed class StoredPanelSlot : INotifyPropertyChanged
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
     }
 }
+
+public sealed class StoredPanelPage
+{
+    public StoredPanelPage(int index, IEnumerable<StoredPanelSlot> slots)
+    {
+        Index = index;
+        Slots = new System.Collections.ObjectModel.ObservableCollection<StoredPanelSlot>(slots);
+    }
+
+    public int Index { get; }
+
+    public string Header => $"{Slots.First().Index}-{Slots.Last().Index}";
+
+    public System.Collections.ObjectModel.ObservableCollection<StoredPanelSlot> Slots { get; }
+}

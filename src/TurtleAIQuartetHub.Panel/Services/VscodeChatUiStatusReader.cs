@@ -6,8 +6,9 @@ namespace TurtleAIQuartetHub.Panel.Services;
 
 public sealed class VscodeChatUiStatusReader
 {
-    private const int MaxElementsToInspect = 2400;
+    private const int MaxElementsToInspect = 6000;
     private const int MaxTextLengthForStatus = 48;
+    private const int MaxTextLengthForConfirmation = 140;
 
     private static readonly string[] RunningStatusExactTexts =
     [
@@ -66,6 +67,17 @@ public sealed class VscodeChatUiStatusReader
         "続行",
         "Allow",
         "許可"
+    ];
+
+    private static readonly string[] ContextualConfirmationActionTexts =
+    [
+        "はい",
+        "Yes",
+        "Run",
+        "実行",
+        "実行する",
+        "Approve",
+        "承認"
     ];
 
     public AiStatusSnapshot? TryRead(WindowSlot slot)
@@ -270,10 +282,14 @@ public sealed class VscodeChatUiStatusReader
     private static bool TryReadConfirmationSignal(AutomationElement element, out string detail)
     {
         var name = GetStringProperty(element, AutomationElement.NameProperty);
+        var automationId = GetStringProperty(element, AutomationElement.AutomationIdProperty);
+        var className = GetStringProperty(element, AutomationElement.ClassNameProperty);
+        var combinedContext = $"{automationId} {className} {name}";
 
         if (IsVisible(element)
             && IsEnabled(element)
-            && IsConfirmationActionName(name))
+            && IsConfirmationActionName(name, out var requiresContext)
+            && (!requiresContext || ContainsAny(combinedContext, ChatContextFragments)))
         {
             detail = string.IsNullOrWhiteSpace(name)
                 ? "VS Code UI: チャット確認ボタンを検出しました。"
@@ -285,10 +301,11 @@ public sealed class VscodeChatUiStatusReader
         return false;
     }
 
-    private static bool IsConfirmationActionName(string value)
+    private static bool IsConfirmationActionName(string value, out bool requiresContext)
     {
-        var trimmed = value.Trim();
-        if (trimmed.Length == 0 || trimmed.Length > MaxTextLengthForStatus)
+        requiresContext = false;
+        var trimmed = NormalizeActionName(value);
+        if (trimmed.Length == 0 || trimmed.Length > MaxTextLengthForConfirmation)
         {
             return false;
         }
@@ -299,10 +316,43 @@ public sealed class VscodeChatUiStatusReader
             return false;
         }
 
-        return ConfirmationActionTexts.Any(signal =>
+        if (ConfirmationActionTexts.Any(signal =>
             string.Equals(trimmed, signal, StringComparison.OrdinalIgnoreCase)
             || trimmed.StartsWith($"{signal} ", StringComparison.OrdinalIgnoreCase)
-            || trimmed.StartsWith($"{signal}(", StringComparison.OrdinalIgnoreCase));
+            || trimmed.StartsWith($"{signal}(", StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
+        requiresContext = true;
+        return ContextualConfirmationActionTexts.Any(signal =>
+            string.Equals(trimmed, signal, StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith($"{signal} ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith($"{signal}(", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith($"{signal}、", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string NormalizeActionName(string value)
+    {
+        var trimmed = value.Trim();
+        var index = 0;
+        while (index < trimmed.Length && (char.IsDigit(trimmed[index]) || char.IsWhiteSpace(trimmed[index])))
+        {
+            index++;
+        }
+
+        if (index < trimmed.Length && (trimmed[index] == '.' || trimmed[index] == '。' || trimmed[index] == ':' || trimmed[index] == ')'))
+        {
+            index++;
+            while (index < trimmed.Length && char.IsWhiteSpace(trimmed[index]))
+            {
+                index++;
+            }
+
+            return trimmed[index..].Trim();
+        }
+
+        return trimmed;
     }
 
     private static bool ContainsAny(string value, IEnumerable<string> fragments)

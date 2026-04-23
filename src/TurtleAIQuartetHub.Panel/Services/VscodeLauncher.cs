@@ -323,23 +323,49 @@ public sealed class VscodeLauncher
     private static uint? StartCode(string codeCommand, WindowSlot slot, AppConfig config, string? launchPath)
     {
         var canUseArgumentList = string.Equals(Path.GetExtension(codeCommand), ".exe", StringComparison.OrdinalIgnoreCase);
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = codeCommand,
-            UseShellExecute = !canUseArgumentList
-        };
-
-        if (canUseArgumentList)
-        {
-            AddLaunchArguments(startInfo.ArgumentList, slot, config, launchPath);
-        }
-        else
-        {
-            startInfo.Arguments = GetLaunchArguments(slot, config, launchPath);
-        }
+        var startInfo = canUseArgumentList
+            ? CreateExecutableStartInfo(codeCommand, slot, config, launchPath)
+            : CreateWrapperStartInfo(codeCommand, slot, config, launchPath);
 
         using var process = Process.Start(startInfo);
         return process is null ? null : (uint)process.Id;
+    }
+
+    private static ProcessStartInfo CreateExecutableStartInfo(
+        string codeCommand,
+        WindowSlot slot,
+        AppConfig config,
+        string? launchPath)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = codeCommand,
+            UseShellExecute = false
+        };
+
+        AddLaunchArguments(startInfo.ArgumentList, slot, config, launchPath);
+        return startInfo;
+    }
+
+    private static ProcessStartInfo CreateWrapperStartInfo(
+        string codeCommand,
+        WindowSlot slot,
+        AppConfig config,
+        string? launchPath)
+    {
+        var wrapperArguments = GetLaunchArguments(slot, config, launchPath);
+        var wrappedCommand = string.IsNullOrWhiteSpace(wrapperArguments)
+            ? QuoteForCommandShell(codeCommand)
+            : $"{QuoteForCommandShell(codeCommand)} {wrapperArguments}";
+
+        return new ProcessStartInfo
+        {
+            FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe",
+            Arguments = $"/d /s /c \"{wrappedCommand}\"",
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        };
     }
 
     private void KillZombieProcess(WindowSlot slot, AppConfig config)
@@ -890,6 +916,11 @@ public sealed class VscodeLauncher
     private static string Quote(string value)
     {
         return $"\"{value.Replace("\"", "\\\"", StringComparison.Ordinal)}\"";
+    }
+
+    private static string QuoteForCommandShell(string value)
+    {
+        return $"\"{value}\"";
     }
 
     private delegate void WinEventDelegate(

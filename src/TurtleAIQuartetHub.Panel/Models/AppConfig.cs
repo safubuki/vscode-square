@@ -33,6 +33,8 @@ public sealed class AppConfig
 
     public int RemoteReconnectTimeoutSeconds { get; set; } = 15;
 
+    public int StatusRefreshIntervalMilliseconds { get; set; } = 750;
+
     public List<SlotConfig> Slots { get; set; } = DefaultSlots();
 
     [JsonIgnore]
@@ -69,6 +71,7 @@ public sealed class AppConfig
             : Environment.ExpandEnvironmentVariables(StateDirectory.Trim());
         LaunchTimeoutSeconds = Math.Clamp(LaunchTimeoutSeconds, 5, 120);
         RemoteReconnectTimeoutSeconds = Math.Clamp(RemoteReconnectTimeoutSeconds, 1, LaunchTimeoutSeconds);
+        StatusRefreshIntervalMilliseconds = Math.Clamp(StatusRefreshIntervalMilliseconds, 250, 5000);
 
         var configuredSlots = Slots ?? DefaultSlots();
         Slots = configuredSlots

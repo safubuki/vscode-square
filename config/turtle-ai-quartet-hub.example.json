@@ -7,6 +7,7 @@
   "reopenLastWorkspace": true,
   "launchTimeoutSeconds": 40,
   "remoteReconnectTimeoutSeconds": 15,
+  "statusRefreshIntervalMilliseconds": 750,
   "slots": [
     {
       "name": "A",

@@ -8,10 +8,12 @@ namespace TurtleAIQuartetHub.Panel.Services;
 public sealed class AiStatusDetector
 {
     private static readonly TimeSpan ErrorSignalWindow = TimeSpan.FromMinutes(3);
-    private static readonly TimeSpan CodexStreamQuietCompletionWindow = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan CodexStreamQuietCompletionWindow = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan UiRunningObservationHoldWindow = TimeSpan.FromMilliseconds(1500);
     private static readonly TimeSpan CodexCarryForwardRunningWindow = TimeSpan.FromMinutes(30);
     private const int MaxRecentLogBytes = 96 * 1024;
     private const int MaxCodexCarryForwardLogBytes = 512 * 1024;
+    private const int MaxCandidateLogFilesPerSource = 6;
     private static readonly string[] ExtensionHostDirectoryNames = ["exthost", "remoteexthost", "remoteexhost"];
     private readonly DateTimeOffset _startedAt = DateTimeOffset.Now;
     private readonly VscodeChatUiStatusReader _uiStatusReader = new();
@@ -134,6 +136,11 @@ public sealed class AiStatusDetector
 
         if (hadPreviousRunningState)
         {
+            if (now - lastRunningSeenAt <= UiRunningObservationHoldWindow)
+            {
+                return new AiStatusSnapshot(AiStatus.Running, "VS Code UI: 直前の実行表示を短時間保持しています。", lastRunningSeenAt);
+            }
+
             _lastRunningSeenBySlot.TryRemove(slotKey, out _);
             _completedAtBySlot[slotKey] = now;
             _confirmationRequestedAtBySlot.TryRemove(slotKey, out _);
@@ -416,7 +423,13 @@ public sealed class AiStatusDetector
     {
         var newestEvidence = AiLogEvidence.Empty(source);
 
-        foreach (var logPath in EnumerateCandidateLogFiles(userDataDirectory, source))
+        foreach (var logPath in EnumerateCandidateLogFiles(userDataDirectory, source)
+                     .Select(TryGetLogFileInfo)
+                     .Where(fileInfo => fileInfo is not null)
+                     .Cast<FileInfo>()
+                     .OrderByDescending(fileInfo => fileInfo.LastWriteTimeUtc)
+                     .Take(MaxCandidateLogFilesPerSource)
+                     .Select(fileInfo => fileInfo.FullName))
         {
             var evidence = ReadLogEvidence(logPath, source, maxRecentLogBytes);
             if (evidence.LastEventAt.HasValue
@@ -427,6 +440,20 @@ public sealed class AiStatusDetector
         }
 
         return newestEvidence;
+    }
+
+    private static FileInfo? TryGetLogFileInfo(string path)
+    {
+        try
+        {
+            var fileInfo = new FileInfo(path);
+            return fileInfo.Exists ? fileInfo : null;
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write(ex);
+            return null;
+        }
     }
 
     private static IEnumerable<string> EnumerateCandidateLogFiles(string userDataDirectory, ExtensionLogSource source)

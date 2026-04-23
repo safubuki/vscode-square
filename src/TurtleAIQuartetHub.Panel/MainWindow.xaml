@@ -609,6 +609,70 @@
       <Setter Property="FontSize" Value="10" />
     </Style>
 
+    <Style x:Key="StoredPanelTabControlStyle" TargetType="TabControl">
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="BorderBrush" Value="Transparent" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabControl">
+            <Grid KeyboardNavigation.TabNavigation="Local">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+              </Grid.RowDefinitions>
+              <TabPanel Grid.Row="0"
+                        IsItemsHost="True"
+                        KeyboardNavigation.TabIndex="1"
+                        Background="Transparent" />
+              <ContentPresenter Grid.Row="1"
+                                ContentSource="SelectedContent"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                KeyboardNavigation.TabIndex="2" />
+            </Grid>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <Style x:Key="StoredPanelTabItemStyle" TargetType="TabItem">
+      <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+      <Setter Property="Background" Value="#17201B" />
+      <Setter Property="BorderBrush" Value="#385345" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Padding" Value="10,3" />
+      <Setter Property="Margin" Value="0,0,4,5" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="TabItem">
+            <Border x:Name="TabBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="7">
+              <ContentPresenter ContentSource="Header"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Margin="{TemplateBinding Padding}" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsSelected" Value="True">
+                <Setter TargetName="TabBorder" Property="Background" Value="#223027" />
+                <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="TabBorder" Property="Background" Value="#243029" />
+                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <Style x:Key="LedIndicatorStyle" TargetType="Ellipse">
       <Setter Property="Width" Value="10" />
       <Setter Property="Height" Value="10" />
@@ -924,6 +988,22 @@
         </Grid>
       </Border>
     </DataTemplate>
+
+    <DataTemplate x:Key="StoredPanelPageTemplate" DataType="{x:Type models:StoredPanelPage}">
+      <ItemsControl ItemsSource="{Binding Slots}"
+                    ItemTemplate="{StaticResource StoredPanelTemplate}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <UniformGrid Columns="4" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemContainerStyle>
+          <Style TargetType="ContentPresenter">
+            <Setter Property="Margin" Value="0,0,4,0" />
+          </Style>
+        </ItemsControl.ItemContainerStyle>
+      </ItemsControl>
+    </DataTemplate>
   </Window.Resources>
 
   <Border x:Name="PanelFrameBorder"
@@ -1060,19 +1140,18 @@
               CornerRadius="8"
               Margin="0,6,0,0"
               Padding="6">
-        <UniformGrid Columns="4">
-          <ContentControl Content="{Binding StoredPanels[0]}"
-                          ContentTemplate="{StaticResource StoredPanelTemplate}"
-                          Margin="0,0,4,0" />
-          <ContentControl Content="{Binding StoredPanels[1]}"
-                          ContentTemplate="{StaticResource StoredPanelTemplate}"
-                          Margin="0,0,4,0" />
-          <ContentControl Content="{Binding StoredPanels[2]}"
-                          ContentTemplate="{StaticResource StoredPanelTemplate}"
-                          Margin="0,0,4,0" />
-          <ContentControl Content="{Binding StoredPanels[3]}"
-                          ContentTemplate="{StaticResource StoredPanelTemplate}" />
-        </UniformGrid>
+        <TabControl ItemsSource="{Binding StoredPanelPages}"
+                    ItemContainerStyle="{StaticResource StoredPanelTabItemStyle}"
+                    ContentTemplate="{StaticResource StoredPanelPageTemplate}"
+                    Style="{StaticResource StoredPanelTabControlStyle}">
+          <TabControl.ItemTemplate>
+            <DataTemplate DataType="{x:Type models:StoredPanelPage}">
+              <TextBlock Text="{Binding Header}"
+                         FontSize="10"
+                         Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" />
+            </DataTemplate>
+          </TabControl.ItemTemplate>
+        </TabControl>
       </Border>
     </Expander>
 

@@ -58,7 +58,7 @@ public partial class MainWindow : Window
 
         _refreshTimer = new DispatcherTimer(DispatcherPriority.Background)
         {
-            Interval = TimeSpan.FromSeconds(2)
+            Interval = TimeSpan.FromMilliseconds(config.StatusRefreshIntervalMilliseconds)
         };
         _refreshTimer.Tick += RefreshTimer_Tick;
         _refreshTimer.Start();
@@ -1643,6 +1643,7 @@ public partial class MainWindow : Window
         CloseAllButton.IsEnabled = !busy;
         DisplayModeButton.IsEnabled = !busy;
         CompactBarPanel.IsEnabled = !busy;
+        StoredPanelsExpander.IsEnabled = !busy;
     }
 
     private readonly record struct CompactRoundTripState(

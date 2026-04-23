@@ -11,6 +11,8 @@ namespace TurtleAIQuartetHub.Panel.Services;
 public sealed class StatusStore : INotifyPropertyChanged
 {
     private static readonly TimeSpan WorkspaceRefreshInterval = TimeSpan.FromSeconds(4);
+    private const int StoredPanelsPerPage = 4;
+    private const int StoredPanelPageCount = 3;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -31,7 +33,13 @@ public sealed class StatusStore : INotifyPropertyChanged
     {
         Config = config;
         Slots = new ObservableCollection<WindowSlot>(config.Slots.Select(slot => new WindowSlot(slot)));
-        StoredPanels = new ObservableCollection<StoredPanelSlot>(Enumerable.Range(1, 4).Select(index => new StoredPanelSlot(index)));
+        StoredPanels = new ObservableCollection<StoredPanelSlot>(
+            Enumerable.Range(1, StoredPanelsPerPage * StoredPanelPageCount).Select(index => new StoredPanelSlot(index)));
+        StoredPanelPages = new ObservableCollection<StoredPanelPage>(
+            Enumerable.Range(0, StoredPanelPageCount)
+                .Select(pageIndex => new StoredPanelPage(
+                    pageIndex + 1,
+                    StoredPanels.Skip(pageIndex * StoredPanelsPerPage).Take(StoredPanelsPerPage))));
         LoadSavedPanelStates();
         foreach (var slot in Slots)
         {
@@ -53,6 +61,8 @@ public sealed class StatusStore : INotifyPropertyChanged
     public ObservableCollection<WindowSlot> Slots { get; }
 
     public ObservableCollection<StoredPanelSlot> StoredPanels { get; }
+
+    public ObservableCollection<StoredPanelPage> StoredPanelPages { get; }
 
     public string Message
     {
@@ -343,12 +353,22 @@ public sealed class StatusStore : INotifyPropertyChanged
         DateTimeOffset refreshStartedAt,
         CancellationToken cancellationToken)
     {
-        var results = new List<WindowSlotStatusRefreshResult>(requests.Count);
-        foreach (var request in requests)
+        var results = new WindowSlotStatusRefreshResult[requests.Count];
+        var options = new ParallelOptions
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            results.Add(RefreshWindowStatusInBackground(windowEnumerator, request, refreshStartedAt, cancellationToken));
-        }
+            CancellationToken = cancellationToken,
+            MaxDegreeOfParallelism = Math.Min(4, Math.Max(1, requests.Count))
+        };
+
+        Parallel.For(0, requests.Count, options, index =>
+        {
+            options.CancellationToken.ThrowIfCancellationRequested();
+            results[index] = RefreshWindowStatusInBackground(
+                windowEnumerator,
+                requests[index],
+                refreshStartedAt,
+                options.CancellationToken);
+        });
 
         return results;
     }
