@@ -2,15 +2,12 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
-using System.Windows.Media.Effects;
 using TurtleAIQuartetHub.Panel.Models;
 
 namespace TurtleAIQuartetHub.Panel.Services;
 
 public sealed class WindowFrameOverlayManager : IDisposable
 {
-    private const int OverlayPadding = 5;
     private readonly WindowArranger _windowArranger;
     private readonly Dictionary<string, SlotFrameOverlayWindow> _overlays = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, OverlaySnapshot> _snapshots = new(StringComparer.OrdinalIgnoreCase);
@@ -39,13 +36,14 @@ public sealed class WindowFrameOverlayManager : IDisposable
                 continue;
             }
 
-            var overlayBounds = new WindowArranger.WindowBounds(
-                bounds.Left - OverlayPadding,
-                bounds.Top - OverlayPadding,
-                bounds.Width + OverlayPadding * 2,
-                bounds.Height + OverlayPadding * 2);
-
             var visual = GetVisual(slot);
+            var overlayOverhang = (int)Math.Ceiling(visual.BorderThickness);
+            var overlayBounds = new WindowArranger.WindowBounds(
+                bounds.Left - overlayOverhang,
+                bounds.Top - overlayOverhang,
+                bounds.Width + overlayOverhang * 2,
+                bounds.Height + overlayOverhang * 2);
+
             var snapshot = new OverlaySnapshot(overlayBounds, slot.AiStatus, slot.IsFocused);
             var overlay = GetOrCreate(slot.Name);
 
@@ -107,12 +105,12 @@ public sealed class WindowFrameOverlayManager : IDisposable
     {
         return slot.AiStatus switch
         {
-            AiStatus.Running => new FrameVisual(ColorFromHex("#49E88F"), ColorFromHex("#49E88F"), 3.5, 16, slot.IsFocused ? 0.92 : 0.86, TimeSpan.FromMilliseconds(680)),
-            AiStatus.Completed => new FrameVisual(ColorFromHex("#43C8FF"), ColorFromHex("#43C8FF"), 3.1, 15, slot.IsFocused ? 0.88 : 0.78, TimeSpan.FromSeconds(2.0)),
-            AiStatus.WaitingForConfirmation => new FrameVisual(ColorFromHex("#F2CA57"), ColorFromHex("#F2CA57"), 3.3, 16, slot.IsFocused ? 0.92 : 0.84, TimeSpan.FromSeconds(1.3)),
-            AiStatus.Error => new FrameVisual(ColorFromHex("#E37B70"), ColorFromHex("#E37B70"), 3.1, 14, slot.IsFocused ? 0.86 : 0.74, TimeSpan.FromSeconds(1.6)),
-            AiStatus.NeedsAttention => new FrameVisual(ColorFromHex("#C9A441"), ColorFromHex("#C9A441"), 3.1, 14, slot.IsFocused ? 0.86 : 0.74, TimeSpan.FromSeconds(1.6)),
-            _ => new FrameVisual(ColorFromHex("#000000"), ColorFromHex("#000000"), 0, 0, 0, null)
+            AiStatus.Running => new FrameVisual(ColorFromHex("#53FF9B"), 5.0, 1.0),
+            AiStatus.Completed => new FrameVisual(ColorFromHex("#45D7FF"), 4.6, 0.98),
+            AiStatus.WaitingForConfirmation => new FrameVisual(ColorFromHex("#FFE16B"), 4.8, 1.0),
+            AiStatus.Error => new FrameVisual(ColorFromHex("#FF8C82"), 4.6, 0.96),
+            AiStatus.NeedsAttention => new FrameVisual(ColorFromHex("#FFD15C"), 4.6, 0.96),
+            _ => new FrameVisual(ColorFromHex("#000000"), 0, 0)
         };
     }
 
@@ -146,18 +144,17 @@ public sealed class WindowFrameOverlayManager : IDisposable
 
     private readonly record struct FrameVisual(
         Color BorderColor,
-        Color GlowColor,
         double BorderThickness,
-        double BlurRadius,
-        double Opacity,
-        TimeSpan? PulseDuration);
+        double Opacity);
 
     private sealed class SlotFrameOverlayWindow : Window
     {
         private readonly Border _frameBorder;
-        private readonly DropShadowEffect _glowEffect;
+        private readonly Border _outerFrameBorder;
+        private readonly Border _innerFrameBorder;
         private readonly SolidColorBrush _borderBrush;
-        private bool _isPulseActive;
+        private readonly SolidColorBrush _outerBorderBrush;
+        private readonly SolidColorBrush _innerBorderBrush;
 
         public SlotFrameOverlayWindow()
         {
@@ -173,10 +170,15 @@ public sealed class WindowFrameOverlayManager : IDisposable
             SnapsToDevicePixels = true;
 
             _borderBrush = new SolidColorBrush(Colors.Transparent);
-            _glowEffect = new DropShadowEffect
+            _outerBorderBrush = new SolidColorBrush(Colors.Transparent);
+            _innerBorderBrush = new SolidColorBrush(Colors.Transparent);
+
+            _outerFrameBorder = new Border
             {
-                ShadowDepth = 0,
-                BlurRadius = 12,
+                Background = Brushes.Transparent,
+                BorderBrush = _outerBorderBrush,
+                BorderThickness = new Thickness(7),
+                CornerRadius = new CornerRadius(15),
                 Opacity = 0
             };
 
@@ -186,15 +188,24 @@ public sealed class WindowFrameOverlayManager : IDisposable
                 BorderBrush = _borderBrush,
                 BorderThickness = new Thickness(3),
                 CornerRadius = new CornerRadius(12),
-                Opacity = 0,
-                Effect = _glowEffect
+                Opacity = 0
+            };
+
+            _innerFrameBorder = new Border
+            {
+                Background = Brushes.Transparent,
+                BorderBrush = _innerBorderBrush,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(9),
+                Margin = new Thickness(5),
+                Opacity = 0
             };
 
             Content = new Grid
             {
                 IsHitTestVisible = false,
-                Margin = new Thickness(3),
-                Children = { _frameBorder }
+                Margin = new Thickness(0),
+                Children = { _outerFrameBorder, _frameBorder, _innerFrameBorder }
             };
         }
 
@@ -219,65 +230,23 @@ public sealed class WindowFrameOverlayManager : IDisposable
         public void ApplyVisual(FrameVisual visual)
         {
             _borderBrush.Color = visual.BorderColor;
+            _outerBorderBrush.Color = visual.BorderColor;
+            _innerBorderBrush.Color = visual.BorderColor;
+            _outerFrameBorder.BorderThickness = new Thickness(visual.BorderThickness + 3.0);
+            _outerFrameBorder.CornerRadius = new CornerRadius(15 + visual.BorderThickness);
+            _outerFrameBorder.Opacity = visual.Opacity * 0.24;
             _frameBorder.BorderThickness = new Thickness(visual.BorderThickness);
             _frameBorder.CornerRadius = new CornerRadius(12 + visual.BorderThickness);
             _frameBorder.Opacity = visual.Opacity;
-            _glowEffect.Color = visual.GlowColor;
-            _glowEffect.BlurRadius = visual.BlurRadius;
-            _glowEffect.Opacity = Math.Min(0.9, visual.Opacity + 0.05);
-
-            if (visual.PulseDuration.HasValue && visual.Opacity > 0)
-            {
-                StartPulse(visual.Opacity, visual.PulseDuration.Value);
-            }
-            else
-            {
-                StopPulse();
-            }
+            _innerFrameBorder.BorderThickness = new Thickness(1.0);
+            _innerFrameBorder.CornerRadius = new CornerRadius(9 + visual.BorderThickness);
+            _innerFrameBorder.Margin = new Thickness(visual.BorderThickness + 2.0);
+            _innerFrameBorder.Opacity = visual.Opacity * 0.42;
         }
 
         public new void Hide()
         {
-            StopPulse();
             base.Hide();
-        }
-
-        private void StartPulse(double baseOpacity, TimeSpan duration)
-        {
-            _isPulseActive = true;
-
-            var borderAnimation = new DoubleAnimation
-            {
-                From = Math.Max(0.28, baseOpacity * 0.7),
-                To = Math.Min(0.96, baseOpacity),
-                Duration = duration,
-                AutoReverse = true,
-                RepeatBehavior = RepeatBehavior.Forever
-            };
-
-            var glowAnimation = new DoubleAnimation
-            {
-                From = Math.Max(0.14, (_glowEffect.Opacity) * 0.62),
-                To = Math.Min(0.96, _glowEffect.Opacity),
-                Duration = duration,
-                AutoReverse = true,
-                RepeatBehavior = RepeatBehavior.Forever
-            };
-
-            _frameBorder.BeginAnimation(UIElement.OpacityProperty, borderAnimation, HandoffBehavior.SnapshotAndReplace);
-            _glowEffect.BeginAnimation(DropShadowEffect.OpacityProperty, glowAnimation, HandoffBehavior.SnapshotAndReplace);
-        }
-
-        private void StopPulse()
-        {
-            if (!_isPulseActive)
-            {
-                return;
-            }
-
-            _frameBorder.BeginAnimation(UIElement.OpacityProperty, null);
-            _glowEffect.BeginAnimation(DropShadowEffect.OpacityProperty, null);
-            _isPulseActive = false;
         }
     }
 }

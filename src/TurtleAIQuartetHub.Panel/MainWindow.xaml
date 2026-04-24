@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:models="clr-namespace:TurtleAIQuartetHub.Panel.Models"
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
-        Title="Turtle AI Quartet Hub"
+        Title="Turtle AI Code Quartet Hub"
         Width="600"
         Height="376"
         MinWidth="524"
@@ -1149,7 +1149,7 @@
     </Grid.RowDefinitions>
 
     <Grid Grid.Row="0">
-      <TextBlock Text="Turtle AI Quartet Hub"
+      <TextBlock Text="Turtle AI Code Quartet Hub"
                  FontWeight="SemiBold"
                  Foreground="{StaticResource TextBrush}" />
       <StackPanel HorizontalAlignment="Right" Orientation="Horizontal">

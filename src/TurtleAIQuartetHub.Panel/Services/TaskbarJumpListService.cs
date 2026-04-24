@@ -103,8 +103,8 @@ public static class TaskbarJumpListService
         var jumpList = CreateBaseJumpList();
         jumpList.JumpItems.Add(new JumpTask
         {
-            Title = "Turtle AI Quartet Hub を起動",
-            Description = "アプリが起動していないときに Turtle AI Quartet Hub を開きます。",
+            Title = "Turtle AI Code Quartet Hub を起動",
+            Description = "アプリが起動していないときに Turtle AI Code Quartet Hub を開きます。",
             Arguments = "--activate",
             ApplicationPath = appPath,
             IconResourcePath = appPath,

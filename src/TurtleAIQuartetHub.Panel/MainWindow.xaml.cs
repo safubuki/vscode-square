@@ -4,7 +4,6 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Effects;
 using System.Windows.Threading;
 using TurtleAIQuartetHub.Panel.Models;
 using TurtleAIQuartetHub.Panel.Services;
@@ -1183,6 +1182,7 @@ public partial class MainWindow : Window
         if (_isCompactMode == compact)
         {
             UpdateDisplayModeChrome();
+            UpdateCompactPanelFrame();
             RefreshAuxiliaryUi();
             return;
         }
@@ -1385,7 +1385,7 @@ public partial class MainWindow : Window
 
     private void UpdateCompactPanelFrame(PanelFrameVisual visual = PanelFrameVisual.Normal)
     {
-        if (!_isCompactMode || visual == PanelFrameVisual.Normal)
+        if (!_isCompactMode)
         {
             ClearCompactPanelFrame();
             return;
@@ -1395,18 +1395,19 @@ public partial class MainWindow : Window
         {
             PanelFrameVisual.Emphasis => (Color)ColorConverter.ConvertFromString("#8AFCB7"),
             PanelFrameVisual.Dimmed => (Color)ColorConverter.ConvertFromString("#1F8E54"),
-            _ => Colors.Transparent
+            _ => (Color)ColorConverter.ConvertFromString("#45D483")
         };
 
         var borderOpacity = visual switch
         {
             PanelFrameVisual.Emphasis => 1.0,
-            PanelFrameVisual.Dimmed => 0.36,
+            PanelFrameVisual.Dimmed => 0.56,
             _ => 0.82
         };
 
+        var borderThickness = visual == PanelFrameVisual.Emphasis ? 2.25 : 1.75;
         PanelFrameBorder.BorderBrush = new SolidColorBrush(color) { Opacity = borderOpacity };
-        PanelFrameBorder.BorderThickness = new Thickness(1.5);
+        PanelFrameBorder.BorderThickness = new Thickness(borderThickness);
         PanelFrameBorder.Effect = null;
     }
 

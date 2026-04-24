@@ -437,7 +437,7 @@ public sealed class StatusStore : INotifyPropertyChanged
         var options = new ParallelOptions
         {
             CancellationToken = cancellationToken,
-            MaxDegreeOfParallelism = Math.Min(4, Math.Max(1, requests.Count))
+            MaxDegreeOfParallelism = Math.Min(2, Math.Max(1, requests.Count))
         };
 
         Parallel.For(0, requests.Count, options, index =>

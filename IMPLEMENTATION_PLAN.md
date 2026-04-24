@@ -1,4 +1,4 @@
-﻿# Turtle AI Quartet Hub 実装計画書
+﻿# Turtle AI Code Quartet Hub 実装計画書
 
 作成日: 2026-04-14
 
@@ -83,19 +83,19 @@ Windowsデスクトップ上で複数のVS Codeウィンドウを扱いやすく
 ## 4. 全体アーキテクチャ
 
 ```text
-+--------------------------+
-| Turtle AI Quartet Hub Panel |
-| WPF / .NET               |
-|                          |
-| - Launch 4 VS Code       |
-| - Arrange 2x2 windows    |
-| - Focus selected window   |
-| - Show status cards      |
-| - Receive telemetry      |
-+------------+-------------+
-             |
-             | Win32 API
-             v
++----------------------------------+
+| Turtle AI Code Quartet Hub Panel |
+| WPF / .NET                       |
+|                                  |
+| - Launch 4 VS Code               |
+| - Arrange 2x2 windows            |
+| - Focus selected window          |
+| - Show status cards              |
+| - Receive telemetry              |
++----------------+-----------------+
+                 |
+                 | Win32 API
+                 v
 +--------------------------+
 | Windows Desktop          |
 | - HWND enumeration       |

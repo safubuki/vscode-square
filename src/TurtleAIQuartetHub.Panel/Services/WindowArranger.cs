@@ -15,7 +15,6 @@ public sealed class WindowArranger
     private const uint SWP_NOACTIVATE = 0x0010;
     private const uint SWP_NOOWNERZORDER = 0x0200;
     private const uint SWP_SHOWWINDOW = 0x0040;
-    private const uint SWP_ASYNCWINDOWPOS = 0x4000;
     private const uint MONITOR_DEFAULTTOPRIMARY = 0x00000001;
     private const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
     private const uint MONITORINFOF_PRIMARY = 0x00000001;
@@ -23,9 +22,9 @@ public sealed class WindowArranger
     private static readonly IntPtr HWND_BOTTOM = new(1);
     private static readonly IntPtr HWND_TOPMOST = new(-1);
     private static readonly IntPtr HWND_NOTOPMOST = new(-2);
-    private static readonly uint ArrangeFlags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS;
-    private static readonly uint LayerFlags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_ASYNCWINDOWPOS;
-    private static readonly uint OverlayFlags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS;
+    private static readonly uint ArrangeFlags = SWP_NOZORDER | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW;
+    private static readonly uint LayerFlags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER;
+    private static readonly uint OverlayFlags = SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW;
 
     public int Arrange(IReadOnlyList<WindowSlot> slots, int gap, int monitorIndex)
     {

@@ -7,9 +7,9 @@
     <UseWPF>true</UseWPF>
     <AssemblyName>TurtleAIQuartetHub</AssemblyName>
     <RootNamespace>TurtleAIQuartetHub.Panel</RootNamespace>
-    <AssemblyTitle>Turtle AI Quartet Hub</AssemblyTitle>
-    <Product>Turtle AI Quartet Hub</Product>
-    <FileDescription>Turtle AI Quartet Hub</FileDescription>
+    <AssemblyTitle>Turtle AI Code Quartet Hub</AssemblyTitle>
+    <Product>Turtle AI Code Quartet Hub</Product>
+    <FileDescription>Turtle AI Code Quartet Hub</FileDescription>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
   </PropertyGroup>
