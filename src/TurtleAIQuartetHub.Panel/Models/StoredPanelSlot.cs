@@ -70,8 +70,7 @@ public sealed class StoredPanelSlot : INotifyPropertyChanged
                 return "-";
             }
 
-            var directoryName = System.IO.Path.GetFileName(WorkspacePath.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
-            return string.IsNullOrWhiteSpace(directoryName) ? WorkspacePath : directoryName;
+            return WorkspacePathDisplay.GetShortPath(WorkspacePath);
         }
     }
 
@@ -126,17 +125,36 @@ public sealed class StoredPanelSlot : INotifyPropertyChanged
     }
 }
 
-public sealed class StoredPanelPage
+public sealed class StoredPanelPage : INotifyPropertyChanged
 {
+    private bool _isSelected;
+
     public StoredPanelPage(int index, IEnumerable<StoredPanelSlot> slots)
     {
         Index = index;
         Slots = new System.Collections.ObjectModel.ObservableCollection<StoredPanelSlot>(slots);
     }
 
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     public int Index { get; }
 
-    public string Header => $"{Slots.First().Index}-{Slots.Last().Index}";
+    public string Header => $"控え{Index}";
+
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value)
+            {
+                return;
+            }
+
+            _isSelected = value;
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSelected)));
+        }
+    }
 
     public System.Collections.ObjectModel.ObservableCollection<StoredPanelSlot> Slots { get; }
 }

@@ -78,8 +78,7 @@ public sealed class WindowSlot : INotifyPropertyChanged
                 return "-";
             }
 
-            var directoryName = System.IO.Path.GetFileName(path.TrimEnd(System.IO.Path.DirectorySeparatorChar, System.IO.Path.AltDirectorySeparatorChar));
-            return string.IsNullOrWhiteSpace(directoryName) ? path : directoryName;
+            return WorkspacePathDisplay.GetShortPath(path);
         }
     }
 

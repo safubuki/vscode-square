@@ -484,6 +484,37 @@
               <Trigger Property="IsPressed" Value="True">
                 <Setter TargetName="CompactButtonBorder" Property="Background" Value="#121715" />
               </Trigger>
+              <DataTrigger Binding="{Binding IsFocused}" Value="True">
+                <Setter TargetName="CompactButtonBorder" Property="Background" Value="#18231D" />
+                <Setter TargetName="CompactButtonBorder" Property="BorderBrush" Value="#45D483" />
+                <Setter TargetName="CompactButtonBorder" Property="Effect">
+                  <Setter.Value>
+                    <DropShadowEffect Color="#45D483"
+                                      BlurRadius="11"
+                                      ShadowDepth="0"
+                                      Opacity="0.3" />
+                  </Setter.Value>
+                </Setter>
+                <DataTrigger.EnterActions>
+                  <BeginStoryboard Name="FocusedCompactCardPulse">
+                    <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                      <ColorAnimation Storyboard.TargetName="CompactButtonBorder"
+                                      Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                      To="#1C3327"
+                                      Duration="0:0:1.65"
+                                      EasingFunction="{StaticResource LedEase}" />
+                      <ColorAnimation Storyboard.TargetName="CompactButtonBorder"
+                                      Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                      To="#7EF3AF"
+                                      Duration="0:0:1.65"
+                                      EasingFunction="{StaticResource LedEase}" />
+                    </Storyboard>
+                  </BeginStoryboard>
+                </DataTrigger.EnterActions>
+                <DataTrigger.ExitActions>
+                  <RemoveStoryboard BeginStoryboardName="FocusedCompactCardPulse" />
+                </DataTrigger.ExitActions>
+              </DataTrigger>
               <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.45" />
               </Trigger>
@@ -500,41 +531,126 @@
           <Setter Property="Background" Value="#241F15" />
           <Setter Property="BorderBrush" Value="#A27E39" />
         </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="CompactSlotBadgeStyle" TargetType="Border">
+      <Setter Property="Width" Value="18" />
+      <Setter Property="Height" Value="18" />
+      <Setter Property="CornerRadius" Value="4" />
+      <Setter Property="Background" Value="#223027" />
+      <Setter Property="BorderBrush" Value="#335A43" />
+      <Setter Property="BorderThickness" Value="1" />
+      <Setter Property="Margin" Value="0,0,5,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding WindowStatus}" Value="{x:Static models:SlotWindowStatus.Missing}">
+          <Setter Property="Background" Value="#1B211E" />
+          <Setter Property="BorderBrush" Value="#4A5550" />
+          <Setter Property="Opacity" Value="0.72" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding WindowStatus}" Value="{x:Static models:SlotWindowStatus.Launching}">
+          <Setter Property="Background" Value="#2C2414" />
+          <Setter Property="BorderBrush" Value="#C49B38" />
+        </DataTrigger>
         <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Running}">
-          <Setter Property="Background" Value="#18231D" />
+          <Setter Property="Background" Value="#123222" />
           <Setter Property="BorderBrush" Value="#45D483" />
           <Setter Property="Effect">
             <Setter.Value>
               <DropShadowEffect Color="#45D483"
-                                BlurRadius="6"
+                                BlurRadius="8"
                                 ShadowDepth="0"
-                                Opacity="0.22" />
+                                Opacity="0.42" />
             </Setter.Value>
           </Setter>
+          <DataTrigger.EnterActions>
+            <BeginStoryboard Name="CompactBadgeRunningPulse">
+              <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                To="#17482F"
+                                Duration="0:0:0.68"
+                                EasingFunction="{StaticResource LedEase}" />
+                <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                To="#7EF3AF"
+                                Duration="0:0:0.68"
+                                EasingFunction="{StaticResource LedEase}" />
+                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                 To="0.84"
+                                 Duration="0:0:0.68"
+                                 EasingFunction="{StaticResource LedEase}" />
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+          <DataTrigger.ExitActions>
+            <RemoveStoryboard BeginStoryboardName="CompactBadgeRunningPulse" />
+          </DataTrigger.ExitActions>
         </DataTrigger>
         <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Completed}">
-          <Setter Property="Background" Value="#172534" />
+          <Setter Property="Background" Value="#123044" />
           <Setter Property="BorderBrush" Value="#43C8FF" />
           <Setter Property="Effect">
             <Setter.Value>
               <DropShadowEffect Color="#43C8FF"
-                                BlurRadius="6"
+                                BlurRadius="9"
                                 ShadowDepth="0"
-                                Opacity="0.2" />
+                                Opacity="0.34" />
             </Setter.Value>
           </Setter>
+          <DataTrigger.EnterActions>
+            <BeginStoryboard Name="CompactBadgeCompletedPulse">
+              <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                To="#19536D"
+                                Duration="0:0:2.1"
+                                EasingFunction="{StaticResource LedEase}" />
+                <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                To="#7CDBFF"
+                                Duration="0:0:2.1"
+                                EasingFunction="{StaticResource LedEase}" />
+                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                 To="0.9"
+                                 Duration="0:0:2.1"
+                                 EasingFunction="{StaticResource LedEase}" />
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+          <DataTrigger.ExitActions>
+            <RemoveStoryboard BeginStoryboardName="CompactBadgeCompletedPulse" />
+          </DataTrigger.ExitActions>
         </DataTrigger>
         <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.WaitingForConfirmation}">
-          <Setter Property="Background" Value="#272113" />
+          <Setter Property="Background" Value="#2E2813" />
           <Setter Property="BorderBrush" Value="#F2CA57" />
           <Setter Property="Effect">
             <Setter.Value>
               <DropShadowEffect Color="#F2CA57"
-                                BlurRadius="6"
+                                BlurRadius="8"
                                 ShadowDepth="0"
-                                Opacity="0.2" />
+                                Opacity="0.38" />
             </Setter.Value>
           </Setter>
+          <DataTrigger.EnterActions>
+            <BeginStoryboard Name="CompactBadgeConfirmPulse">
+              <Storyboard RepeatBehavior="Forever" AutoReverse="True">
+                <ColorAnimation Storyboard.TargetProperty="(Border.Background).(SolidColorBrush.Color)"
+                                To="#3D3418"
+                                Duration="0:0:1.4"
+                                EasingFunction="{StaticResource LedEase}" />
+                <ColorAnimation Storyboard.TargetProperty="(Border.BorderBrush).(SolidColorBrush.Color)"
+                                To="#FFE081"
+                                Duration="0:0:1.4"
+                                EasingFunction="{StaticResource LedEase}" />
+                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                 To="0.88"
+                                 Duration="0:0:1.4"
+                                 EasingFunction="{StaticResource LedEase}" />
+              </Storyboard>
+            </BeginStoryboard>
+          </DataTrigger.EnterActions>
+          <DataTrigger.ExitActions>
+            <RemoveStoryboard BeginStoryboardName="CompactBadgeConfirmPulse" />
+          </DataTrigger.ExitActions>
         </DataTrigger>
         <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.NeedsAttention}">
           <Setter Property="Background" Value="#242014" />
@@ -544,16 +660,27 @@
           <Setter Property="Background" Value="#261918" />
           <Setter Property="BorderBrush" Value="#E37B70" />
         </DataTrigger>
-        <DataTrigger Binding="{Binding IsFocused}" Value="True">
-          <Setter Property="BorderThickness" Value="2" />
-          <Setter Property="Effect">
-            <Setter.Value>
-              <DropShadowEffect Color="#9BF6C1"
-                                BlurRadius="8"
-                                ShadowDepth="0"
-                                Opacity="0.24" />
-            </Setter.Value>
-          </Setter>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="CompactSlotBadgeTextStyle" TargetType="TextBlock">
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding WindowStatus}" Value="{x:Static models:SlotWindowStatus.Missing}">
+          <Setter Property="Foreground" Value="#6F7B74" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Running}">
+          <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.Completed}">
+          <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding AiStatus}" Value="{x:Static models:AiStatus.WaitingForConfirmation}">
+          <Setter Property="Foreground" Value="#FFF3BE" />
         </DataTrigger>
       </Style.Triggers>
     </Style>
@@ -601,71 +728,80 @@
       <Setter Property="BorderBrush" Value="{StaticResource BorderBrushSoft}" />
       <Setter Property="BorderThickness" Value="1" />
       <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Height" Value="118" />
+      <Setter Property="MinHeight" Value="118" />
+      <Setter Property="MaxHeight" Value="118" />
       <Setter Property="Padding" Value="6" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="VerticalAlignment" Value="Top" />
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True">
+          <Setter Property="Background" Value="#202A25" />
+          <Setter Property="BorderBrush" Value="#3E5148" />
+        </Trigger>
+      </Style.Triggers>
     </Style>
 
     <Style x:Key="StoredPanelsExpanderStyle" TargetType="Expander">
       <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontSize" Value="12" />
     </Style>
 
-    <Style x:Key="StoredPanelTabControlStyle" TargetType="TabControl">
-      <Setter Property="Background" Value="Transparent" />
-      <Setter Property="BorderBrush" Value="Transparent" />
-      <Setter Property="Padding" Value="0" />
-      <Setter Property="Template">
-        <Setter.Value>
-          <ControlTemplate TargetType="TabControl">
-            <Grid KeyboardNavigation.TabNavigation="Local">
-              <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-              </Grid.RowDefinitions>
-              <TabPanel Grid.Row="0"
-                        IsItemsHost="True"
-                        KeyboardNavigation.TabIndex="1"
-                        Background="Transparent" />
-              <ContentPresenter Grid.Row="1"
-                                ContentSource="SelectedContent"
-                                ContentTemplate="{TemplateBinding ContentTemplate}"
-                                KeyboardNavigation.TabIndex="2" />
-            </Grid>
-          </ControlTemplate>
-        </Setter.Value>
-      </Setter>
-    </Style>
-
-    <Style x:Key="StoredPanelTabItemStyle" TargetType="TabItem">
-      <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}" />
+    <Style x:Key="StoredPageTabButtonStyle" TargetType="Button">
+      <Setter Property="Foreground" Value="#B9C5BE" />
       <Setter Property="Background" Value="#17201B" />
-      <Setter Property="BorderBrush" Value="#385345" />
+      <Setter Property="BorderBrush" Value="#4A6658" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Padding" Value="10,3" />
-      <Setter Property="Margin" Value="0,0,4,5" />
+      <Setter Property="Padding" Value="16,0,16,0" />
+      <Setter Property="Margin" Value="0,0,10,4" />
+      <Setter Property="MinWidth" Value="82" />
+      <Setter Property="Height" Value="22" />
+      <Setter Property="MinHeight" Value="22" />
       <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="AllowDrop" Value="True" />
+      <Setter Property="FontSize" Value="11" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+      <Setter Property="SnapsToDevicePixels" Value="True" />
+      <Setter Property="UseLayoutRounding" Value="True" />
+      <EventSetter Event="DragEnter" Handler="StoredPanelTab_DragEnter" />
+      <EventSetter Event="DragLeave" Handler="StoredPanelTab_DragLeave" />
+      <EventSetter Event="DragOver" Handler="StoredPanelTab_DragOver" />
+      <EventSetter Event="Drop" Handler="StoredPanelTab_Drop" />
       <Setter Property="Template">
         <Setter.Value>
-          <ControlTemplate TargetType="TabItem">
-            <Border x:Name="TabBorder"
-                    Background="{TemplateBinding Background}"
-                    BorderBrush="{TemplateBinding BorderBrush}"
-                    BorderThickness="{TemplateBinding BorderThickness}"
-                    CornerRadius="7">
-              <ContentPresenter ContentSource="Header"
+          <ControlTemplate TargetType="Button">
+            <Grid x:Name="TabButtonRoot"
+                  Height="{TemplateBinding Height}"
+                  MinWidth="{TemplateBinding MinWidth}"
+                  ClipToBounds="False"
+                  SnapsToDevicePixels="True"
+                  UseLayoutRounding="True">
+              <Border x:Name="TabButtonBorder"
+                      Background="{TemplateBinding Background}"
+                      BorderBrush="{TemplateBinding BorderBrush}"
+                      BorderThickness="{TemplateBinding BorderThickness}"
+                      CornerRadius="6"
+                      SnapsToDevicePixels="True"
+                      UseLayoutRounding="True" />
+              <ContentPresenter ContentSource="Content"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Margin="{TemplateBinding Padding}" />
-            </Border>
+            </Grid>
             <ControlTemplate.Triggers>
-              <Trigger Property="IsSelected" Value="True">
-                <Setter TargetName="TabBorder" Property="Background" Value="#223027" />
-                <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
+              <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                <Setter TargetName="TabButtonBorder" Property="Background" Value="#223027" />
+                <Setter TargetName="TabButtonBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
                 <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-                <Setter Property="FontWeight" Value="SemiBold" />
-              </Trigger>
+              </DataTrigger>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="TabBorder" Property="Background" Value="#243029" />
+                <Setter TargetName="TabButtonBorder" Property="Background" Value="#243029" />
+                <Setter TargetName="TabButtonBorder" Property="BorderBrush" Value="#5E7568" />
                 <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+              </Trigger>
+              <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                <Setter TargetName="TabButtonBorder" Property="BorderBrush" Value="#8AFCB7" />
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
@@ -845,23 +981,11 @@
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
-            <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
 
-          <Border Width="16"
-                  Height="16"
-                  CornerRadius="4"
-                  Background="#223027"
-                  BorderBrush="#335A43"
-                  BorderThickness="1"
-                  Margin="0,0,4,0"
-                  VerticalAlignment="Center">
+          <Border Style="{StaticResource CompactSlotBadgeStyle}">
             <TextBlock Text="{Binding Name}"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center"
-                       FontSize="11"
-                       FontWeight="SemiBold"
-                       Foreground="{StaticResource AccentBrush}" />
+                       Style="{StaticResource CompactSlotBadgeTextStyle}" />
           </Border>
 
           <TextBlock Grid.Column="1"
@@ -872,22 +996,25 @@
                      FontWeight="SemiBold"
                      TextTrimming="CharacterEllipsis"
                      Foreground="{StaticResource TextBrush}" />
-
-          <Ellipse Grid.Column="2"
-                   Margin="4,0,0,0"
-                   VerticalAlignment="Center"
-                   Style="{StaticResource CompactStatusDotStyle}" />
         </Grid>
       </Button>
     </DataTemplate>
 
     <DataTemplate x:Key="StoredPanelTemplate" DataType="{x:Type models:StoredPanelSlot}">
-      <Border Style="{StaticResource StoredCardBorderStyle}">
-        <Grid>
+      <Border Style="{StaticResource StoredCardBorderStyle}"
+              Tag="{Binding}"
+              PreviewMouseLeftButtonDown="StoredPanelCard_PreviewMouseLeftButtonDown"
+              PreviewMouseMove="StoredPanelCard_PreviewMouseMove"
+              AllowDrop="True"
+              DragEnter="StoredPanelCard_DragEnter"
+              DragLeave="StoredPanelCard_DragLeave"
+              DragOver="StoredPanelCard_DragOver"
+              Drop="StoredPanelCard_Drop">
+        <Grid Height="104">
           <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
+            <RowDefinition Height="24" />
+            <RowDefinition Height="18" />
+            <RowDefinition Height="62" />
           </Grid.RowDefinitions>
 
           <Grid>
@@ -917,6 +1044,7 @@
                        ToolTip="{Binding DisplayTitle}"
                        Margin="0,0,6,0"
                        FontWeight="SemiBold"
+                       Foreground="{StaticResource TextBrush}"
                        VerticalAlignment="Center" />
 
                 <Button Grid.Column="2"
@@ -930,11 +1058,11 @@
 
           <TextBlock Grid.Row="1"
                      Text="{Binding ShortPath}"
-                     Margin="0,4,0,0"
+                     Margin="0,3,0,0"
                      Foreground="{StaticResource MutedTextBrush}"
                      FontSize="10" />
 
-              <Grid Grid.Row="2" Margin="0,8,0,0" HorizontalAlignment="Stretch">
+              <Grid Grid.Row="2" Margin="0,6,0,0" HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
             <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="*" />
@@ -1130,8 +1258,9 @@
               Margin="5,2,5,3">
       <Expander.Header>
         <TextBlock Text="控え Quartet"
-                   Foreground="{StaticResource MutedTextBrush}"
-                   FontSize="10" />
+                   Foreground="{StaticResource TextBrush}"
+                   FontSize="12"
+                   FontWeight="SemiBold" />
       </Expander.Header>
             <Border x:Name="StoredPanelsExpanderContent"
               Background="{StaticResource SurfaceBrush}"
@@ -1140,18 +1269,32 @@
               CornerRadius="8"
               Margin="0,6,0,0"
               Padding="6">
-        <TabControl ItemsSource="{Binding StoredPanelPages}"
-                    ItemContainerStyle="{StaticResource StoredPanelTabItemStyle}"
-                    ContentTemplate="{StaticResource StoredPanelPageTemplate}"
-                    Style="{StaticResource StoredPanelTabControlStyle}">
-          <TabControl.ItemTemplate>
-            <DataTemplate DataType="{x:Type models:StoredPanelPage}">
-              <TextBlock Text="{Binding Header}"
-                         FontSize="10"
-                         Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}" />
-            </DataTemplate>
-          </TabControl.ItemTemplate>
-        </TabControl>
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+
+          <ItemsControl ItemsSource="{Binding StoredPanelPages}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="{x:Type models:StoredPanelPage}">
+                <Button Content="{Binding Header}"
+                        Tag="{Binding}"
+                        Click="StoredPanelPageTab_Click"
+                        Style="{StaticResource StoredPageTabButtonStyle}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <ContentControl Grid.Row="1"
+                          Content="{Binding SelectedStoredPanelPage}"
+                          ContentTemplate="{StaticResource StoredPanelPageTemplate}" />
+        </Grid>
       </Border>
     </Expander>
 

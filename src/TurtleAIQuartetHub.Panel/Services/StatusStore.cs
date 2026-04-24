@@ -25,6 +25,7 @@ public sealed class StatusStore : INotifyPropertyChanged
     }
 
     private string _message;
+    private StoredPanelPage? _selectedStoredPanelPage;
     private bool _suppressPersistence;
     private readonly Dictionary<string, DateTimeOffset> _workspaceRefreshTimestamps = new(StringComparer.OrdinalIgnoreCase);
     private readonly AiStatusDetector _aiStatusDetector = new();
@@ -40,6 +41,7 @@ public sealed class StatusStore : INotifyPropertyChanged
                 .Select(pageIndex => new StoredPanelPage(
                     pageIndex + 1,
                     StoredPanels.Skip(pageIndex * StoredPanelsPerPage).Take(StoredPanelsPerPage))));
+        SelectStoredPanelPage(StoredPanelPages.FirstOrDefault());
         LoadSavedPanelStates();
         foreach (var slot in Slots)
         {
@@ -64,6 +66,21 @@ public sealed class StatusStore : INotifyPropertyChanged
 
     public ObservableCollection<StoredPanelPage> StoredPanelPages { get; }
 
+    public StoredPanelPage? SelectedStoredPanelPage
+    {
+        get => _selectedStoredPanelPage;
+        private set
+        {
+            if (ReferenceEquals(_selectedStoredPanelPage, value))
+            {
+                return;
+            }
+
+            _selectedStoredPanelPage = value;
+            OnPropertyChanged();
+        }
+    }
+
     public string Message
     {
         get => _message;
@@ -78,6 +95,21 @@ public sealed class StatusStore : INotifyPropertyChanged
             DiagnosticLog.Write(value);
             OnPropertyChanged();
         }
+    }
+
+    public void SelectStoredPanelPage(StoredPanelPage? page)
+    {
+        if (page is null || !StoredPanelPages.Contains(page))
+        {
+            return;
+        }
+
+        foreach (var storedPanelPage in StoredPanelPages)
+        {
+            storedPanelPage.IsSelected = ReferenceEquals(storedPanelPage, page);
+        }
+
+        SelectedStoredPanelPage = page;
     }
 
     public void AssignWindow(WindowSlot slot, WindowInfo window)
@@ -281,6 +313,54 @@ public sealed class StatusStore : INotifyPropertyChanged
         }
 
         SavePanelStates();
+    }
+
+    public void SwapStoredPanels(StoredPanelSlot source, StoredPanelSlot target)
+    {
+        if (ReferenceEquals(source, target))
+        {
+            return;
+        }
+
+        _suppressPersistence = true;
+
+        try
+        {
+            (source.PanelTitle, target.PanelTitle) = (target.PanelTitle, source.PanelTitle);
+            (source.WorkspacePath, target.WorkspacePath) = (target.WorkspacePath, source.WorkspacePath);
+        }
+        finally
+        {
+            _suppressPersistence = false;
+        }
+
+        SavePanelStates();
+    }
+
+    public bool TryMoveStoredPanelToPage(
+        StoredPanelSlot source,
+        StoredPanelPage targetPage,
+        out StoredPanelSlot? targetSlot,
+        out bool swapped)
+    {
+        targetSlot = null;
+        swapped = false;
+
+        if (!source.HasContent || targetPage.Slots.Contains(source))
+        {
+            return false;
+        }
+
+        targetSlot = targetPage.Slots.FirstOrDefault(slot => !slot.HasContent)
+            ?? targetPage.Slots.FirstOrDefault();
+        if (targetSlot is null || ReferenceEquals(source, targetSlot))
+        {
+            return false;
+        }
+
+        swapped = targetSlot.HasContent;
+        SwapStoredPanels(source, targetSlot);
+        return true;
     }
 
     public void SwapSlotContents(WindowSlot source, WindowSlot target)

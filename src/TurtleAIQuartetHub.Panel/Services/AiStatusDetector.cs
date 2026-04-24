@@ -8,8 +8,8 @@ namespace TurtleAIQuartetHub.Panel.Services;
 public sealed class AiStatusDetector
 {
     private static readonly TimeSpan ErrorSignalWindow = TimeSpan.FromMinutes(3);
-    private static readonly TimeSpan CodexStreamQuietCompletionWindow = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan UiRunningObservationHoldWindow = TimeSpan.FromMilliseconds(1500);
+    private static readonly TimeSpan CodexStreamQuietCompletionWindow = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan UiRunningObservationHoldWindow = TimeSpan.FromSeconds(12);
     private static readonly TimeSpan CodexCarryForwardRunningWindow = TimeSpan.FromMinutes(30);
     private const int MaxRecentLogBytes = 96 * 1024;
     private const int MaxCodexCarryForwardLogBytes = 512 * 1024;
@@ -29,7 +29,7 @@ public sealed class AiStatusDetector
             "Codex",
             ["openai.chatgpt"],
             "Codex.log",
-            "Conversation created",
+            "codex-explicit-running-start",
             [],
             ["Activating Codex extension", "Initialize received", "method=client-status-changed"],
             [],
@@ -76,6 +76,19 @@ public sealed class AiStatusDetector
         var slotKey = GetSlotKey(slot);
         var slotStartedAt = GetSlotStartedAt(slot);
         var now = DateTimeOffset.Now;
+        var hadPreviousRunningState = _lastRunningSeenBySlot.TryGetValue(slotKey, out var lastRunningSeenAt);
+        var userDataDirectory = SlotUserDataPaths.GetEffectiveUserDataDirectory(slot.Name, config);
+        var canReadLogs = !string.IsNullOrWhiteSpace(userDataDirectory) && Directory.Exists(userDataDirectory);
+        var logEvidence = canReadLogs
+            ? TryDetectFromLogs(slotKey, slotStartedAt, userDataDirectory!)
+            : null;
+
+        if (logEvidence is { Status: AiStatus.Running or AiStatus.WaitingForConfirmation })
+        {
+            RememberDetectedState(slotKey, logEvidence, now);
+            return logEvidence;
+        }
+
         var uiEvidence = _uiStatusReader.TryRead(slot);
         if (uiEvidence is { Status: AiStatus.Running })
         {
@@ -92,36 +105,19 @@ public sealed class AiStatusDetector
             return uiEvidence;
         }
 
-        var hadPreviousRunningState = _lastRunningSeenBySlot.TryGetValue(slotKey, out var lastRunningSeenAt);
-        if (false && _lastRunningSeenBySlot.TryRemove(slotKey, out _))
+        if (hadPreviousRunningState
+            && now - lastRunningSeenAt <= UiRunningObservationHoldWindow
+            && (logEvidence is null
+                || logEvidence.Status == AiStatus.Idle
+                || logEvidence is { Status: AiStatus.Completed, RunningSignalQuietCompletionWindow: not null }))
         {
-            _completedAtBySlot[slotKey] = now;
-            return new AiStatusSnapshot(AiStatus.Completed, $"VS Code UI: {lastRunningSeenAt:HH:mm:ss} の実行中表示が終了しました。", now);
+            return new AiStatusSnapshot(AiStatus.Running, "VS Code UI: 直前の実行表示を保持しています。", lastRunningSeenAt);
         }
 
-        var userDataDirectory = SlotUserDataPaths.GetEffectiveUserDataDirectory(slot.Name, config);
-        var canReadLogs = !string.IsNullOrWhiteSpace(userDataDirectory) && Directory.Exists(userDataDirectory);
-        if (canReadLogs)
+        if (logEvidence is { Status: AiStatus.Completed or AiStatus.Error or AiStatus.NeedsAttention })
         {
-            var evidences = LogSources
-                .Select(source => ReadEvidence(userDataDirectory!, source))
-                .Select(evidence => KeepOnlyCurrentEvidence(slotKey, slotStartedAt, evidence))
-                .Where(evidence => evidence.Status is AiStatus.Running or AiStatus.Completed or AiStatus.Error or AiStatus.NeedsAttention or AiStatus.WaitingForConfirmation)
-                .ToList();
-
-            if (evidences.Count > 0)
-            {
-                var bestEvidence = GetBestEvidence(evidences);
-                RememberDetectedState(slotKey, bestEvidence, now);
-                return bestEvidence;
-            }
-
-            var codexContinuation = TryDetectCodexStreamContinuation(slotKey, slotStartedAt, userDataDirectory!);
-            if (codexContinuation is not null)
-            {
-                RememberDetectedState(slotKey, codexContinuation, now);
-                return codexContinuation;
-            }
+            RememberDetectedState(slotKey, logEvidence, now);
+            return logEvidence;
         }
 
         if (_confirmationRequestedAtBySlot.TryGetValue(slotKey, out var confirmationRequestedAt))
@@ -136,11 +132,6 @@ public sealed class AiStatusDetector
 
         if (hadPreviousRunningState)
         {
-            if (now - lastRunningSeenAt <= UiRunningObservationHoldWindow)
-            {
-                return new AiStatusSnapshot(AiStatus.Running, "VS Code UI: 直前の実行表示を短時間保持しています。", lastRunningSeenAt);
-            }
-
             _lastRunningSeenBySlot.TryRemove(slotKey, out _);
             _completedAtBySlot[slotKey] = now;
             _confirmationRequestedAtBySlot.TryRemove(slotKey, out _);
@@ -224,6 +215,22 @@ public sealed class AiStatusDetector
                 _confirmationRequestedAtBySlot.TryRemove(slotKey, out _);
                 break;
         }
+    }
+
+    private AiStatusSnapshot? TryDetectFromLogs(string slotKey, DateTimeOffset slotStartedAt, string userDataDirectory)
+    {
+        var evidences = LogSources
+            .Select(source => ReadEvidence(userDataDirectory, source))
+            .Select(evidence => KeepOnlyCurrentEvidence(slotKey, slotStartedAt, evidence))
+            .Where(evidence => evidence.Status is AiStatus.Running or AiStatus.Completed or AiStatus.Error or AiStatus.NeedsAttention or AiStatus.WaitingForConfirmation)
+            .ToList();
+
+        if (evidences.Count > 0)
+        {
+            return GetBestEvidence(evidences);
+        }
+
+        return TryDetectCodexStreamContinuation(slotKey, slotStartedAt, userDataDirectory);
     }
 
     private AiStatusSnapshot KeepOnlyCurrentEvidence(

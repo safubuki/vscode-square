@@ -96,6 +96,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!EnsureCodeCommandAvailable())
+        {
+            return;
+        }
+
         await RunBusyAsync(async () =>
         {
             // 非表示中にLaunchが押された場合は非表示状態を解除
@@ -111,12 +116,6 @@ public partial class MainWindow : Window
 
             _statusStore.LoadSavedSettings();
             await RefreshSlotsAsync(allowDuringBusy: true);
-
-            if (!_vscodeLauncher.IsCodeCommandAvailable(_statusStore.Config.CodeCommand))
-            {
-                _statusStore.Message = $"`{_statusStore.Config.CodeCommand}` が見つかりません。VS Codeのコマンドまたは設定を確認してください。";
-                return;
-            }
 
             _statusStore.Message = "未起動のVS Codeを起動しています...";
             var assignments = await _vscodeLauncher.LaunchMissingAsync(
@@ -146,6 +145,27 @@ public partial class MainWindow : Window
                     : "新しいVS Codeウィンドウは見つかりませんでした。";
             }
         });
+    }
+
+    private bool EnsureCodeCommandAvailable()
+    {
+        if (_vscodeLauncher.IsCodeCommandAvailable(_statusStore.Config.CodeCommand))
+        {
+            return true;
+        }
+
+        var command = string.IsNullOrWhiteSpace(_statusStore.Config.CodeCommand)
+            ? "code"
+            : _statusStore.Config.CodeCommand;
+        var message = $"VS Code がインストールされていないか、`{command}` コマンドが見つかりません。VS Code をインストールするか、設定の codeCommand を確認してください。";
+        _statusStore.Message = message;
+        MessageBox.Show(
+            this,
+            message,
+            "VS Code が見つかりません",
+            MessageBoxButton.OK,
+            MessageBoxImage.Warning);
+        return false;
     }
 
     private void MinimizeButton_Click(object sender, RoutedEventArgs e)
@@ -396,6 +416,184 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    private void StoredPanelCard_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragStartPoint = e.GetPosition(null);
+    }
+
+    private void StoredPanelCard_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        if (IsInteractiveCardChild(e.OriginalSource as DependencyObject))
+        {
+            return;
+        }
+
+        var diff = _dragStartPoint - e.GetPosition(null);
+        if (Math.Abs(diff.X) <= SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(diff.Y) <= SystemParameters.MinimumVerticalDragDistance)
+        {
+            return;
+        }
+
+        if (sender is not FrameworkElement { Tag: StoredPanelSlot storedPanel } || !storedPanel.HasContent)
+        {
+            return;
+        }
+
+        var dragData = new DataObject("StoredPanelSlot", storedPanel);
+        DragDrop.DoDragDrop((DependencyObject)sender, dragData, DragDropEffects.Move);
+    }
+
+    private void StoredPanelCard_DragEnter(object sender, DragEventArgs e)
+    {
+        if (sender is not Border border || !e.Data.GetDataPresent("StoredPanelSlot"))
+        {
+            return;
+        }
+
+        var sourcePanel = e.Data.GetData("StoredPanelSlot") as StoredPanelSlot;
+        var targetPanel = border.Tag as StoredPanelSlot;
+        if (sourcePanel is not null && targetPanel is not null && !ReferenceEquals(sourcePanel, targetPanel))
+        {
+            border.BorderBrush = (SolidColorBrush)FindResource("AccentBrush");
+        }
+    }
+
+    private void StoredPanelCard_DragLeave(object sender, DragEventArgs e)
+    {
+        if (sender is Border border)
+        {
+            border.ClearValue(Border.BorderBrushProperty);
+        }
+    }
+
+    private void StoredPanelCard_DragOver(object sender, DragEventArgs e)
+    {
+        var sourcePanel = e.Data.GetData("StoredPanelSlot") as StoredPanelSlot;
+        var targetPanel = (sender as FrameworkElement)?.Tag as StoredPanelSlot;
+        e.Effects = sourcePanel is not null
+            && targetPanel is not null
+            && !ReferenceEquals(sourcePanel, targetPanel)
+            ? DragDropEffects.Move
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void StoredPanelCard_Drop(object sender, DragEventArgs e)
+    {
+        if (sender is Border border)
+        {
+            border.ClearValue(Border.BorderBrushProperty);
+        }
+
+        var sourcePanel = e.Data.GetData("StoredPanelSlot") as StoredPanelSlot;
+        var targetPanel = (sender as FrameworkElement)?.Tag as StoredPanelSlot;
+        if (sourcePanel is null || targetPanel is null || ReferenceEquals(sourcePanel, targetPanel))
+        {
+            return;
+        }
+
+        var sourceLabel = sourcePanel.Label;
+        var targetLabel = targetPanel.Label;
+        var targetHadContent = targetPanel.HasContent;
+        _statusStore.SwapStoredPanels(sourcePanel, targetPanel);
+        _statusStore.Message = targetHadContent
+            ? $"{sourceLabel}と{targetLabel}の控えカードを入れ替えました。"
+            : $"{sourceLabel}を{targetLabel}へ移動しました。";
+        RefreshAuxiliaryUi();
+        e.Handled = true;
+    }
+
+    private void StoredPanelTab_DragEnter(object sender, DragEventArgs e)
+    {
+        if (sender is not FrameworkElement element || !e.Data.GetDataPresent("StoredPanelSlot"))
+        {
+            return;
+        }
+
+        var sourcePanel = e.Data.GetData("StoredPanelSlot") as StoredPanelSlot;
+        var targetPage = element.DataContext as StoredPanelPage;
+        if (sourcePanel is null || targetPage is null || targetPage.Slots.Contains(sourcePanel))
+        {
+            return;
+        }
+
+        _statusStore.SelectStoredPanelPage(targetPage);
+        if (sender is Control control)
+        {
+            control.BorderBrush = (SolidColorBrush)FindResource("AccentBrush");
+            control.Background = (SolidColorBrush)FindResource("AccentDarkBrush");
+        }
+
+        e.Handled = true;
+    }
+
+    private void StoredPanelTab_DragLeave(object sender, DragEventArgs e)
+    {
+        ClearStoredPanelTabDragHighlight(sender);
+    }
+
+    private void StoredPanelTab_DragOver(object sender, DragEventArgs e)
+    {
+        var sourcePanel = e.Data.GetData("StoredPanelSlot") as StoredPanelSlot;
+        var targetPage = (sender as FrameworkElement)?.DataContext as StoredPanelPage;
+        e.Effects = sourcePanel is not null
+            && targetPage is not null
+            && !targetPage.Slots.Contains(sourcePanel)
+            ? DragDropEffects.Move
+            : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void StoredPanelTab_Drop(object sender, DragEventArgs e)
+    {
+        ClearStoredPanelTabDragHighlight(sender);
+
+        var sourcePanel = e.Data.GetData("StoredPanelSlot") as StoredPanelSlot;
+        var targetPage = (sender as FrameworkElement)?.DataContext as StoredPanelPage;
+        if (sourcePanel is null || targetPage is null)
+        {
+            return;
+        }
+
+        _statusStore.SelectStoredPanelPage(targetPage);
+        var sourceLabel = sourcePanel.Label;
+        if (_statusStore.TryMoveStoredPanelToPage(sourcePanel, targetPage, out var targetPanel, out var swapped)
+            && targetPanel is not null)
+        {
+            _statusStore.Message = swapped
+                ? $"{sourceLabel}を{targetPage.Header}へ移動し、{targetPanel.Label}と入れ替えました。"
+                : $"{sourceLabel}を{targetPage.Header}の{targetPanel.Label}へ移動しました。";
+            RefreshAuxiliaryUi();
+        }
+
+        e.Handled = true;
+    }
+
+    private void StoredPanelPageTab_Click(object sender, RoutedEventArgs e)
+    {
+        if ((sender as FrameworkElement)?.DataContext is StoredPanelPage page)
+        {
+            _statusStore.SelectStoredPanelPage(page);
+        }
+    }
+
+    private static void ClearStoredPanelTabDragHighlight(object sender)
+    {
+        if (sender is not Control control)
+        {
+            return;
+        }
+
+        control.ClearValue(Control.BackgroundProperty);
+        control.ClearValue(Control.BorderBrushProperty);
+    }
+
     private void ToggleSlotFocus(WindowSlot slot)
     {
         var previouslyFocusedSlot = _statusStore.Slots.FirstOrDefault(item => item.IsFocused);
@@ -617,6 +815,11 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (!EnsureCodeCommandAvailable())
+        {
+            return;
+        }
+
         // 新規: 空きスロットにデフォルト名を設定
         if (!slot.HasPanelContent)
         {
@@ -719,6 +922,11 @@ public partial class MainWindow : Window
 
         var targetSlot = _statusStore.FindSlot(targetSlotName);
         if (targetSlot is null)
+        {
+            return;
+        }
+
+        if (!EnsureCodeCommandAvailable())
         {
             return;
         }
@@ -1177,7 +1385,7 @@ public partial class MainWindow : Window
 
     private void UpdateCompactPanelFrame(PanelFrameVisual visual = PanelFrameVisual.Normal)
     {
-        if (!_isCompactMode)
+        if (!_isCompactMode || visual == PanelFrameVisual.Normal)
         {
             ClearCompactPanelFrame();
             return;
@@ -1187,7 +1395,7 @@ public partial class MainWindow : Window
         {
             PanelFrameVisual.Emphasis => (Color)ColorConverter.ConvertFromString("#8AFCB7"),
             PanelFrameVisual.Dimmed => (Color)ColorConverter.ConvertFromString("#1F8E54"),
-            _ => (Color)ColorConverter.ConvertFromString("#45D483")
+            _ => Colors.Transparent
         };
 
         var borderOpacity = visual switch
