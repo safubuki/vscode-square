@@ -10,7 +10,8 @@ public sealed class AiStatusDetector
     private static readonly TimeSpan ErrorSignalWindow = TimeSpan.FromMinutes(3);
     private static readonly TimeSpan CodexStreamQuietCompletionWindow = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan UiRunningObservationHoldWindow = TimeSpan.FromSeconds(12);
-    private static readonly TimeSpan ConfirmationObservationHoldWindow = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan ConfirmationObservationHoldWindow = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan LogConfirmationFreshnessWindow = TimeSpan.FromSeconds(10);
     private const int MaxRecentLogBytes = 96 * 1024;
     private const int MaxCandidateLogFilesPerSource = 6;
     private static readonly string[] ExtensionHostDirectoryNames = ["exthost", "remoteexthost", "remoteexhost"];
@@ -405,6 +406,7 @@ public sealed class AiStatusDetector
 
         if (recentEvidence.LastConfirmationSignalAt is { } confirmAt
             && confirmAt >= lastRunningSeenAt
+            && IsFreshConfirmation(confirmAt)
             && !HasActivityAfterConfirmation(recentEvidence, confirmAt))
         {
             return new AiStatusSnapshot(AiStatus.WaitingForConfirmation, $"{source.DisplayName}: {confirmAt:HH:mm:ss} にユーザー確認待ちを検出しました。", confirmAt);
@@ -723,6 +725,7 @@ public sealed class AiStatusDetector
 
             if (evidence.LastConfirmationSignalAt is { } confirmAt
                 && confirmAt >= runningAt
+                && IsFreshConfirmation(confirmAt, now)
                 && !HasActivityAfterConfirmation(evidence, confirmAt))
             {
                 return new AiStatusSnapshot(AiStatus.WaitingForConfirmation, $"{evidence.SourceName}: {confirmAt:HH:mm:ss} にユーザー確認待ちを検出しました。", confirmAt);
@@ -756,6 +759,16 @@ public sealed class AiStatusDetector
     private static DateTimeOffset? Max(DateTimeOffset? current, DateTimeOffset candidate)
     {
         return !current.HasValue || candidate > current.Value ? candidate : current;
+    }
+
+    private static bool IsFreshConfirmation(DateTimeOffset confirmationAt)
+    {
+        return IsFreshConfirmation(confirmationAt, DateTimeOffset.Now);
+    }
+
+    private static bool IsFreshConfirmation(DateTimeOffset confirmationAt, DateTimeOffset now)
+    {
+        return now - confirmationAt <= LogConfirmationFreshnessWindow;
     }
 
     private static bool HasActivityAfterConfirmation(AiLogEvidence evidence, DateTimeOffset confirmationAt)

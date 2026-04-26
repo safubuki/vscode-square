@@ -199,7 +199,7 @@ public sealed class VscodeChatUiStatusReader
             && hasChatContext
             && (ContainsAny(className, StopClassFragments)
                 || ContainsAny(combinedContext, StopClassFragments)
-                || ContainsStopAction(name)))
+                || IsActionLikeElement(element, className) && IsStopActionName(name)))
         {
             detail = string.IsNullOrWhiteSpace(name)
                 ? "VS Code UI: チャット停止ボタンを検出しました。"
@@ -272,9 +272,48 @@ public sealed class VscodeChatUiStatusReader
             || RunningStatusPrefixes.Any(signal => normalized.StartsWith(signal, StringComparison.OrdinalIgnoreCase));
     }
 
-    private static bool ContainsStopAction(string value)
+    private static bool IsStopActionName(string value)
     {
-        return StopActionTexts.Any(signal => value.Contains(signal, StringComparison.OrdinalIgnoreCase));
+        var trimmed = NormalizeActionName(value);
+        if (trimmed.Length == 0 || trimmed.Length > MaxTextLengthForStatus)
+        {
+            return false;
+        }
+
+        return StopActionTexts.Any(signal =>
+            string.Equals(trimmed, signal, StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith($"{signal} ", StringComparison.OrdinalIgnoreCase)
+            || trimmed.StartsWith($"{signal}(", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsActionLikeElement(AutomationElement element, string className)
+    {
+        try
+        {
+            var controlType = element.GetCurrentPropertyValue(AutomationElement.ControlTypeProperty, true);
+            if (controlType == ControlType.Button
+                || controlType == ControlType.MenuItem
+                || controlType == ControlType.Hyperlink)
+            {
+                return true;
+            }
+        }
+        catch (ElementNotAvailableException)
+        {
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
+        catch (COMException)
+        {
+            return false;
+        }
+
+        return className.Contains("button", StringComparison.OrdinalIgnoreCase)
+            || className.Contains("monaco-button", StringComparison.OrdinalIgnoreCase)
+            || className.Contains("action-item", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryReadConfirmationSignal(AutomationElement element, out string detail)
@@ -283,12 +322,13 @@ public sealed class VscodeChatUiStatusReader
         var automationId = GetStringProperty(element, AutomationElement.AutomationIdProperty);
         var className = GetStringProperty(element, AutomationElement.ClassNameProperty);
         var combinedContext = $"{automationId} {className}";
-        var hasChatContext = HasChatContext(element, combinedContext) || ContainsAny(name, ChatContextFragments);
+        var hasChatContext = HasChatContext(element, combinedContext);
 
         if (IsVisible(element)
             && IsEnabled(element)
-            && IsConfirmationActionName(name, out var requiresContext)
-            && (!requiresContext || hasChatContext))
+            && hasChatContext
+            && IsActionLikeElement(element, className)
+            && IsConfirmationActionName(name, out _))
         {
             detail = string.IsNullOrWhiteSpace(name)
                 ? "VS Code UI: チャット確認ボタンを検出しました。"
