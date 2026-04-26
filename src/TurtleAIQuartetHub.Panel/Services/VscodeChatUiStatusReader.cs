@@ -48,10 +48,7 @@ public sealed class VscodeChatUiStatusReader
         "chat",
         "copilot",
         "codex",
-        "agent",
-        "interactive",
-        "action-label",
-        "codicon"
+        "agent"
     ];
 
     private static readonly string[] StopClassFragments =
@@ -189,8 +186,9 @@ public sealed class VscodeChatUiStatusReader
         var className = GetStringProperty(element, AutomationElement.ClassNameProperty);
         var combinedContext = $"{automationId} {className}";
         var isVisible = IsVisible(element);
+        var hasChatContext = HasChatContext(element, combinedContext);
 
-        if (isVisible && IsCurrentStatusText(name))
+        if (isVisible && hasChatContext && IsCurrentStatusText(name))
         {
             detail = $"VS Code UI: {name} を検出しました。";
             return true;
@@ -198,7 +196,7 @@ public sealed class VscodeChatUiStatusReader
 
         if (isVisible
             && IsEnabled(element)
-            && ContainsAny(combinedContext, ChatContextFragments)
+            && hasChatContext
             && (ContainsAny(className, StopClassFragments)
                 || ContainsAny(combinedContext, StopClassFragments)
                 || ContainsStopAction(name)))
@@ -284,12 +282,13 @@ public sealed class VscodeChatUiStatusReader
         var name = GetStringProperty(element, AutomationElement.NameProperty);
         var automationId = GetStringProperty(element, AutomationElement.AutomationIdProperty);
         var className = GetStringProperty(element, AutomationElement.ClassNameProperty);
-        var combinedContext = $"{automationId} {className} {name}";
+        var combinedContext = $"{automationId} {className}";
+        var hasChatContext = HasChatContext(element, combinedContext) || ContainsAny(name, ChatContextFragments);
 
         if (IsVisible(element)
             && IsEnabled(element)
             && IsConfirmationActionName(name, out var requiresContext)
-            && (!requiresContext || ContainsAny(combinedContext, ChatContextFragments)))
+            && (!requiresContext || hasChatContext))
         {
             detail = string.IsNullOrWhiteSpace(name)
                 ? "VS Code UI: チャット確認ボタンを検出しました。"
@@ -298,6 +297,53 @@ public sealed class VscodeChatUiStatusReader
         }
 
         detail = string.Empty;
+        return false;
+    }
+
+    private static bool HasChatContext(AutomationElement element, string selfContext)
+    {
+        if (ContainsAny(selfContext, ChatContextFragments))
+        {
+            return true;
+        }
+
+        var walker = TreeWalker.RawViewWalker;
+        var current = element;
+        for (var depth = 0; depth < 6; depth++)
+        {
+            AutomationElement? parent;
+            try
+            {
+                parent = walker.GetParent(current);
+            }
+            catch (ElementNotAvailableException)
+            {
+                return false;
+            }
+            catch (InvalidOperationException)
+            {
+                return false;
+            }
+            catch (COMException)
+            {
+                return false;
+            }
+
+            if (parent is null)
+            {
+                return false;
+            }
+
+            var parentContext =
+                $"{GetStringProperty(parent, AutomationElement.AutomationIdProperty)} {GetStringProperty(parent, AutomationElement.ClassNameProperty)}";
+            if (ContainsAny(parentContext, ChatContextFragments))
+            {
+                return true;
+            }
+
+            current = parent;
+        }
+
         return false;
     }
 
