@@ -5,3 +5,16 @@ obj/
 .turtle-ai-quartet-hub/
 .dotnet_home/
 config/turtle-ai-quartet-hub.json
+dist/
+AppPackages/
+TestResults/
+*.appinstaller
+*.appx
+*.appxupload
+*.appxbundle
+*.cer
+*.msix
+*.msixupload
+*.msixbundle
+*.pfx
+*.wapproj.user

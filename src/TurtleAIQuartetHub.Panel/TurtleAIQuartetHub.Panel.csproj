@@ -20,5 +20,6 @@
 
   <ItemGroup>
     <Content Include="..\..\config\turtle-ai-quartet-hub.example.json" Link="config\turtle-ai-quartet-hub.example.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\LICENSE.txt" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
