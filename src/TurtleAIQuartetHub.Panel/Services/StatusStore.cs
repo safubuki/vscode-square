@@ -15,7 +15,7 @@ public sealed class StatusStore : INotifyPropertyChanged
     private static readonly TimeSpan SlowRefreshLogInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan SlowSlotProbeLogInterval = TimeSpan.FromSeconds(5);
     private const int StoredPanelsPerPage = 4;
-    private const int StoredPanelPageCount = 4;
+    private const int StoredPanelPageCount = 6;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -1091,6 +1091,7 @@ public sealed class StatusStore : INotifyPropertyChanged
             var stateDocument = JsonSerializer.Deserialize<SavedPanelStateDocument>(json, JsonOptions) ?? new SavedPanelStateDocument();
             ApplyVisibleStates(stateDocument.VisibleSlots);
             ApplyStoredStates(stateDocument.StoredPanels);
+            ApplyStoredPageStates(stateDocument.StoredPanelPages);
         }
         catch (Exception ex)
         {
@@ -1135,6 +1136,13 @@ public sealed class StatusStore : INotifyPropertyChanged
                         PanelTitle = slot.PanelTitle,
                         WorkspacePath = slot.WorkspacePath,
                         ApplicationId = slot.ApplicationId
+                    })
+                    .ToList(),
+                StoredPanelPages = StoredPanelPages
+                    .Select(page => new SavedStoredPanelPageState
+                    {
+                        Index = page.Index,
+                        CustomHeader = page.CustomHeader
                     })
                     .ToList()
             };
@@ -1231,6 +1239,41 @@ public sealed class StatusStore : INotifyPropertyChanged
                 ApplyApplicationMetadata(storedPanel);
             }
         }
+    }
+
+    private void ApplyStoredPageStates(IEnumerable<SavedStoredPanelPageState> states)
+    {
+        foreach (var page in StoredPanelPages)
+        {
+            page.ResetHeader();
+        }
+
+        foreach (var state in states)
+        {
+            var page = StoredPanelPages.FirstOrDefault(item => item.Index == state.Index);
+            if (page is not null)
+            {
+                page.CustomHeader = state.CustomHeader ?? string.Empty;
+            }
+        }
+    }
+
+    /// <summary>控えタブの名前を変更する。空文字なら既定名に戻る。</summary>
+    public void RenameStoredPanelPage(StoredPanelPage page, string? header)
+    {
+        if (!StoredPanelPages.Contains(page))
+        {
+            return;
+        }
+
+        page.CustomHeader = header ?? string.Empty;
+        SavePanelStates();
+    }
+
+    /// <summary>控えタブの名前を既定に戻す。</summary>
+    public void ResetStoredPanelPageHeader(StoredPanelPage page)
+    {
+        RenameStoredPanelPage(page, string.Empty);
     }
 
     private void EnsureUniqueRuntimeSlotNames()

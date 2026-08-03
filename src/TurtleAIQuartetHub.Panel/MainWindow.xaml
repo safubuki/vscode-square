@@ -894,9 +894,11 @@
       <Setter Property="Background" Value="#17201B" />
       <Setter Property="BorderBrush" Value="#4A6658" />
       <Setter Property="BorderThickness" Value="1" />
-      <Setter Property="Padding" Value="16,0,16,0" />
-      <Setter Property="Margin" Value="0,0,10,4" />
-      <Setter Property="MinWidth" Value="82" />
+      <Setter Property="Padding" Value="8,0,8,0" />
+      <Setter Property="Margin" Value="0,0,6,4" />
+      <Setter Property="MinWidth" Value="72" />
+      <!-- 名前を変えたタブが長くなっても、6枚が横一列に収まる範囲に抑える。 -->
+      <Setter Property="MaxWidth" Value="112" />
       <Setter Property="Height" Value="22" />
       <Setter Property="MinHeight" Value="22" />
       <Setter Property="Cursor" Value="Hand" />
@@ -926,10 +928,12 @@
                       CornerRadius="6"
                       SnapsToDevicePixels="True"
                       UseLayoutRounding="True" />
-              <ContentPresenter ContentSource="Content"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Margin="{TemplateBinding Padding}" />
+              <!-- 長い名前は「…」で省略する（全文は ToolTip 側で確認できる）。 -->
+              <TextBlock Text="{TemplateBinding Content}"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Margin="{TemplateBinding Padding}"
+                         TextTrimming="CharacterEllipsis" />
             </Grid>
             <ControlTemplate.Triggers>
               <DataTrigger Binding="{Binding IsSelected}" Value="True">
@@ -1700,10 +1704,43 @@
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate DataType="{x:Type models:StoredPanelPage}">
-                  <Button Content="{Binding Header}"
-                          Tag="{Binding}"
-                          Click="StoredPanelPageTab_Click"
-                          Style="{StaticResource StoredPageTabButtonStyle}" />
+                  <!-- タブ本体と、ダブルクリックで前に出る名前編集用の入力欄を重ねている。 -->
+                  <Grid>
+                    <Button Content="{Binding Header}"
+                            Tag="{Binding}"
+                            Click="StoredPanelPageTab_Click"
+                            MouseDoubleClick="StoredPanelPageTab_MouseDoubleClick"
+                            Style="{StaticResource StoredPageTabButtonStyle}">
+                      <Button.ToolTip>
+                        <!-- 名前が省略表示されても、ここで全文を確認できる。 -->
+                        <TextBlock>
+                          <Run Text="{Binding Header, Mode=OneWay}" />
+                          <LineBreak />
+                          <Run Text="クリックで切り替え、ダブルクリックで名前を変更" />
+                        </TextBlock>
+                      </Button.ToolTip>
+                    </Button>
+                    <TextBox x:Name="PageHeaderEditBox"
+                             Tag="{Binding}"
+                             Visibility="Collapsed"
+                             Text="{Binding Header, Mode=OneWay}"
+                             MaxLength="20"
+                             Margin="0,0,6,4"
+                             Height="22"
+                             Padding="4,0"
+                             FontSize="11"
+                             FontWeight="SemiBold"
+                             Background="#223027"
+                             Foreground="{StaticResource TextBrush}"
+                             CaretBrush="{StaticResource TextBrush}"
+                             SelectionBrush="{StaticResource AccentBrush}"
+                             BorderBrush="{StaticResource AccentBrush}"
+                             BorderThickness="1"
+                             HorizontalContentAlignment="Center"
+                             VerticalContentAlignment="Center"
+                             KeyDown="StoredPanelPageHeaderEditBox_KeyDown"
+                             LostFocus="StoredPanelPageHeaderEditBox_LostFocus" />
+                  </Grid>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -1719,7 +1756,7 @@
                     MinHeight="22"
                     FontSize="11"
                     Padding="12,0"
-                    Margin="6,0,4,4"
+                    Margin="20,0,4,4"
                     ToolTip="控えの空き（歯抜け）を前に詰めて整列します。ページをまたいで詰めます。" />
           </Grid>
 
@@ -2446,6 +2483,59 @@
                               </Grid>
                             </Grid>
                           </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
+
+                <Border Margin="0,12,0,0"
+                        Padding="10"
+                        Background="#111815"
+                        BorderBrush="{StaticResource BorderBrushSoft}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                  <StackPanel>
+                    <TextBlock Text="控えタブの名前"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource TextBrush}" />
+                    <TextBlock Text="タブをダブルクリックしても変更できます。空欄にすると既定名に戻ります。"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="10"
+                               TextWrapping="Wrap"
+                               Margin="0,3,0,0" />
+                    <ItemsControl Margin="0,8,0,0"
+                                  ItemsSource="{Binding StoredPanelPages}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:StoredPanelPage}">
+                          <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                              <ColumnDefinition Width="58" />
+                              <ColumnDefinition Width="*" />
+                              <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBlock Text="{Binding DefaultHeader}"
+                                       VerticalAlignment="Center"
+                                       Foreground="{StaticResource AccentBrush}"
+                                       FontWeight="SemiBold"
+                                       FontSize="11" />
+                            <TextBox Grid.Column="1"
+                                     Tag="{Binding}"
+                                     Text="{Binding CustomHeader, UpdateSourceTrigger=LostFocus}"
+                                     MaxLength="20"
+                                     ToolTip="空欄にすると既定名に戻ります"
+                                     LostFocus="SettingsStoredPageHeaderTextBox_LostFocus"
+                                     Style="{StaticResource SettingsTextBoxStyle}" />
+                            <Button Grid.Column="2"
+                                    Content="既定に戻す"
+                                    Tag="{Binding}"
+                                    Click="SettingsResetStoredPageHeaderButton_Click"
+                                    IsEnabled="{Binding HasCustomHeader}"
+                                    ToolTip="この控えの名前だけを既定に戻します"
+                                    Style="{StaticResource StoredAssignButton}"
+                                    Margin="8,0,0,0" />
+                          </Grid>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>

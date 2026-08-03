@@ -1305,6 +1305,105 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// タブをダブルクリックしたら、その場で名前を編集できるようにする。
+    /// ボタンの上に重ねてある TextBox を前に出し、全選択した状態でフォーカスを移す。
+    /// </summary>
+    private void StoredPanelPageTab_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not Button button || button.DataContext is not StoredPanelPage page)
+        {
+            return;
+        }
+
+        var editBox = FindStoredPanelPageHeaderEditBox(button);
+        if (editBox is null)
+        {
+            return;
+        }
+
+        _statusStore.SelectStoredPanelPage(page);
+
+        editBox.Text = page.Header;
+        editBox.Visibility = Visibility.Visible;
+
+        // テンプレート適用直後はフォーカスを受け取れないことがあるので、レイアウト後に確定させる。
+        editBox.Dispatcher.BeginInvoke(
+            new Action(() =>
+            {
+                editBox.Focus();
+                editBox.SelectAll();
+            }),
+            DispatcherPriority.Input);
+
+        e.Handled = true;
+    }
+
+    private void StoredPanelPageHeaderEditBox_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (sender is not TextBox editBox)
+        {
+            return;
+        }
+
+        if (e.Key == Key.Enter)
+        {
+            CommitStoredPanelPageHeaderEdit(editBox);
+            e.Handled = true;
+            return;
+        }
+
+        if (e.Key == Key.Escape)
+        {
+            // 取り消し。LostFocus 側で確定させないよう、先に編集欄を閉じる。
+            editBox.Visibility = Visibility.Collapsed;
+            Keyboard.ClearFocus();
+            e.Handled = true;
+        }
+    }
+
+    private void StoredPanelPageHeaderEditBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox editBox && editBox.Visibility == Visibility.Visible)
+        {
+            CommitStoredPanelPageHeaderEdit(editBox);
+        }
+    }
+
+    private void CommitStoredPanelPageHeaderEdit(TextBox editBox)
+    {
+        editBox.Visibility = Visibility.Collapsed;
+
+        if (editBox.DataContext is not StoredPanelPage page)
+        {
+            return;
+        }
+
+        var previousHeader = page.Header;
+        _statusStore.RenameStoredPanelPage(page, editBox.Text);
+
+        if (!string.Equals(previousHeader, page.Header, StringComparison.Ordinal))
+        {
+            _statusStore.Message = page.HasCustomHeader
+                ? $"控えタブの名前を「{page.Header}」に変更しました。"
+                : $"控えタブの名前を既定の「{page.Header}」に戻しました。";
+        }
+
+        if (editBox.IsKeyboardFocusWithin)
+        {
+            Keyboard.ClearFocus();
+        }
+    }
+
+    /// <summary>タブのボタンと同じ DataTemplate 内に置かれた、名前編集用の TextBox を取り出す。</summary>
+    private static TextBox? FindStoredPanelPageHeaderEditBox(Button tabButton)
+    {
+        return (VisualTreeHelper.GetParent(tabButton) as Grid)?
+            .Children
+            .OfType<TextBox>()
+            .FirstOrDefault();
+    }
+
     private static void ClearStoredPanelTabDragHighlight(object sender)
     {
         if (sender is not Control control)
@@ -2365,6 +2464,37 @@ public partial class MainWindow : Window
         _statusStore.ClearStoredPanel(storedPanel);
         _statusStore.Message = $"{storedPanel.Label} を空きスロットに戻しました。";
         RefreshAuxiliaryUi();
+    }
+
+    /// <summary>設定画面で名前欄を編集し終えたときに、その内容を保存する。</summary>
+    private void SettingsStoredPageHeaderTextBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is not TextBox { Tag: StoredPanelPage page } textBox)
+        {
+            return;
+        }
+
+        // TextBox のバインディングが CustomHeader へ書き戻した後なので、保存だけ行う。
+        _statusStore.RenameStoredPanelPage(page, page.CustomHeader);
+
+        // 前後の空白や既定名そのものの入力は CustomHeader 側で空文字に正規化される。
+        // その結果を入力欄へ映し直さないと、保存済みの値と表示がずれたままになる。
+        if (!string.Equals(textBox.Text, page.CustomHeader, StringComparison.Ordinal))
+        {
+            textBox.Text = page.CustomHeader;
+        }
+    }
+
+    /// <summary>この控えの名前だけを既定に戻す（他の控えの名前は変えない）。</summary>
+    private void SettingsResetStoredPageHeaderButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: StoredPanelPage page } || !page.HasCustomHeader)
+        {
+            return;
+        }
+
+        _statusStore.ResetStoredPanelPageHeader(page);
+        _statusStore.Message = $"控えタブの名前を既定の「{page.Header}」に戻しました。";
     }
 
     private void CompactStoredPanelsButton_Click(object sender, RoutedEventArgs e)

@@ -155,6 +155,7 @@ public sealed class StoredPanelSlot : INotifyPropertyChanged
 public sealed class StoredPanelPage : INotifyPropertyChanged
 {
     private bool _isSelected;
+    private string _customHeader = string.Empty;
 
     public StoredPanelPage(int index, IEnumerable<StoredPanelSlot> slots)
     {
@@ -166,7 +167,48 @@ public sealed class StoredPanelPage : INotifyPropertyChanged
 
     public int Index { get; }
 
-    public string Header => $"控え{Index}";
+    /// <summary>タブに出す既定の名前。ユーザーが未設定なら、この名前がそのまま使われる。</summary>
+    public string DefaultHeader => $"控え{Index}";
+
+    /// <summary>
+    /// ユーザーが付けた名前。空文字なら既定名に戻る（＝「デフォルトに戻す」は空文字の代入で済む）。
+    /// </summary>
+    public string CustomHeader
+    {
+        get => _customHeader;
+        set
+        {
+            var normalized = (value ?? string.Empty).Trim();
+
+            // 既定名そのものを入力した場合は「未設定」と同じ扱いにして、
+            // 既定名の変更（例: 表記ゆれの修正）に自動で追従できるようにする。
+            if (string.Equals(normalized, DefaultHeader, StringComparison.Ordinal))
+            {
+                normalized = string.Empty;
+            }
+
+            if (_customHeader == normalized)
+            {
+                return;
+            }
+
+            _customHeader = normalized;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(Header));
+            OnPropertyChanged(nameof(HasCustomHeader));
+        }
+    }
+
+    /// <summary>既定名から変更されているか。「デフォルトに戻す」ボタンの活性判定に使う。</summary>
+    public bool HasCustomHeader => !string.IsNullOrEmpty(_customHeader);
+
+    public string Header => HasCustomHeader ? _customHeader : DefaultHeader;
+
+    /// <summary>この控えの名前を既定に戻す。</summary>
+    public void ResetHeader()
+    {
+        CustomHeader = string.Empty;
+    }
 
     public bool IsSelected
     {
@@ -184,4 +226,9 @@ public sealed class StoredPanelPage : INotifyPropertyChanged
     }
 
     public System.Collections.ObjectModel.ObservableCollection<StoredPanelSlot> Slots { get; }
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+    }
 }
