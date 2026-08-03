@@ -89,6 +89,7 @@ public partial class MainWindow : Window
     private bool _isCardDragDropInProgress;
     private CancellationTokenSource? _panelFrontRestoreCancellation;
     private CancellationTokenSource? _focusSwitchArrangeCancellation;
+    private long _focusTransitionVersion;
     private CancellationTokenSource? _focusedZOrderVerificationCancellation;
     private CancellationTokenSource? _focusedSlotReassertCancellation;
     private CancellationTokenSource? _panelLocateCancellation;
@@ -825,6 +826,23 @@ public partial class MainWindow : Window
         HandleCompactSlotToggle(slot);
     }
 
+    /// <summary>
+    /// 縮小モードのカード内にある起動/終了トグル。カード本体の Button に Click が
+    /// バブリングしてフォーカス切替まで走るのを防ぐため、ここで Handled にしてから
+    /// 標準モードと同じ SlotMainActionButton_Click に委譲する。
+    /// </summary>
+    private void CompactSlotPowerButton_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+
+        if (_isBusy || sender is not FrameworkElement { Tag: WindowSlot })
+        {
+            return;
+        }
+
+        SlotMainActionButton_Click(sender, e);
+    }
+
     private void MicroSlotButton_Click(object sender, RoutedEventArgs e)
     {
         if (_isBusy || sender is not FrameworkElement { Tag: WindowSlot slot })
@@ -1304,6 +1322,7 @@ public partial class MainWindow : Window
         // 破棄しないと、古い整列が新フォーカスの 1 面表示を 4 面へ戻し、別スロットの 1 面だけが
         // 背面に残る不整合表示（1 面が背面・4 面が前面）になる。
         CancelFocusSwitchArrange();
+        var focusTransitionVersion = ++_focusTransitionVersion;
 
         // フォーカスはディスプレイごとに 1 つ。対象スロットの実効ディスプレイに絞って操作する。
         var monitor = GetSlotMonitorIndex(slot);
@@ -1320,7 +1339,12 @@ public partial class MainWindow : Window
                 && _windowArranger.IsObscuredByExternalWindow(slot.WindowHandle, GetManagedWindowHandles()))
             {
                 PrepareFocusTransitionBackdrop(slot, arrangeOtherSlotsFirst: false);
-                _windowArranger.FocusMaximizedOnMonitor(slot.WindowHandle, monitor);
+                await _windowArranger.FocusMaximizedOnMonitorAsync(slot.WindowHandle, monitor);
+                if (focusTransitionVersion != _focusTransitionVersion)
+                {
+                    return;
+                }
+
                 _windowArranger.BringToFrontWithoutTopmost(slot.WindowHandle);
                 BringPanelToFrontImmediate();
                 SchedulePanelToFront();
@@ -1378,7 +1402,13 @@ public partial class MainWindow : Window
         SetManagedWindowLayerState(WindowSlot.SlotWindowLayerMode.Topmost);
         PrepareFocusTransitionBackdrop(slot, arrangeOtherSlotsFirst: false);
         // 単独移動中ならその実効ディスプレイで最大化する。未移動なら従来どおりベース面で最大化。
-        if (_windowArranger.FocusMaximizedOnMonitor(slot.WindowHandle, monitor))
+        var focusActivated = await _windowArranger.FocusMaximizedOnMonitorAsync(slot.WindowHandle, monitor);
+        if (focusTransitionVersion != _focusTransitionVersion)
+        {
+            return;
+        }
+
+        if (focusActivated)
         {
             // 新フォーカスを最大化する間、他スロットのタイルと前フォーカスの最大化はそのまま残して
             // 画面を覆わせておく。ここで他スロットを背面（HWND_BOTTOM）へ送ると、最大化アニメが
@@ -2615,7 +2645,8 @@ public partial class MainWindow : Window
             excludedSlot,
             _statusStore.Config.Gap,
             GetActiveMonitorIndex(),
-            animateRestore: false);
+            animateRestore: false,
+            keepAboveHandle: excludedSlot.WindowHandle);
         if (refreshAuxiliaryUiAfterArrange)
         {
             RefreshAuxiliaryUi();
@@ -3647,9 +3678,15 @@ public partial class MainWindow : Window
             ? "VisibilityRestoreButtonStyle"
             : "BarButton");
 
+        // 縮小/極小モードの円形トグルも、非表示中は標準モードの「表示」ボタンと同じ黄色にする。
+        var centerButtonStyle = (Style)FindResource(_areWindowsHidden
+            ? "MicroCenterRestoreButtonStyle"
+            : "MicroCenterButtonStyle");
+
         if (MicroVisibilityButton is not null)
         {
             MicroVisibilityButton.Content = _areWindowsHidden ? "表" : "非";
+            MicroVisibilityButton.Style = centerButtonStyle;
             MicroVisibilityButton.ToolTip = _areWindowsHidden
                 ? "管理中ウィンドウを再表示"
                 : "管理中ウィンドウを非表示";
@@ -3659,6 +3696,7 @@ public partial class MainWindow : Window
         {
             CompactVisibilityButton.Content = MicroVisibilityButton?.Content ?? (_areWindowsHidden ? "\u8868" : "\u975E");
             CompactVisibilityButton.ToolTip = MicroVisibilityButton?.ToolTip;
+            CompactVisibilityButton.Style = centerButtonStyle;
         }
     }
 

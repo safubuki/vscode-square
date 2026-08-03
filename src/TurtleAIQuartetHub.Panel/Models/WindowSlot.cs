@@ -44,6 +44,9 @@ public sealed class WindowSlot : INotifyPropertyChanged
     // 既定（ベースディスプレイ）の色。テーマのアクセント緑に合わせる。
     private static readonly Brush DefaultDisplayBrush = CreateFrozenBrush("#45D483");
 
+    // 未命名スロットに自動で付く既定タイトルの接頭辞。極小ラベルの判定に使う。
+    private const string DefaultTitlePrefix = "スロット";
+
     public WindowSlot(SlotConfig config)
     {
         Name = config.Name;
@@ -240,12 +243,19 @@ public sealed class WindowSlot : INotifyPropertyChanged
             if (SetField(ref _panelTitle, normalizedValue))
             {
                 OnPropertyChanged(nameof(DisplayTitle));
+                OnPropertyChanged(nameof(MicroLabel));
                 OnPropertyChanged(nameof(HasPanelContent));
             }
         }
     }
 
     public string DisplayTitle => string.IsNullOrWhiteSpace(PanelTitle) ? GetDefaultPanelTitle() : PanelTitle;
+
+    /// <summary>
+    /// 極小モードのセルに出す短縮ラベル。タイトルの先頭 1〜2 文字を取り、A/B/C/D より
+    /// 中身で識別できるようにする。タイトル未設定（既定名）のときはスロット名に戻す。
+    /// </summary>
+    public string MicroLabel => BuildMicroLabel();
 
     public string DefaultPanelTitle => GetDefaultPanelTitle();
 
@@ -515,6 +525,46 @@ public sealed class WindowSlot : INotifyPropertyChanged
     private string GetDefaultPanelTitle()
     {
         return string.IsNullOrWhiteSpace(Name) ? "未設定" : $"スロット {Name}";
+    }
+
+    private string BuildMicroLabel()
+    {
+        // 既定タイトル("スロット A" / 新規時の "スロットA"、重複時は "スロットA 2" など)は
+        // どれも先頭 2 文字が "スロ" になり識別に使えない。実質未設定として扱い、
+        // 従来どおりスロット名(A/B/C/D)を出す。
+        if (string.IsNullOrWhiteSpace(PanelTitle)
+            || PanelTitle.TrimStart().StartsWith(DefaultTitlePrefix, StringComparison.Ordinal))
+        {
+            return Name;
+        }
+
+        var title = PanelTitle.Trim();
+
+        // 記号始まり（"[wip] foo" など）は中身に届かないので、最初の英数字/文字まで送る。
+        var start = 0;
+        while (start < title.Length && !char.IsLetterOrDigit(title[start]))
+        {
+            start++;
+        }
+
+        if (start >= title.Length)
+        {
+            return Name;
+        }
+
+        // サロゲートペア（絵文字など）は 1 文字として扱い、途中で割らない。
+        var label = string.Empty;
+        var index = start;
+        var taken = 0;
+        while (index < title.Length && taken < 2)
+        {
+            var length = char.IsHighSurrogate(title[index]) && index + 1 < title.Length ? 2 : 1;
+            label += title.Substring(index, length);
+            index += length;
+            taken++;
+        }
+
+        return label.Length == 0 ? Name : label;
     }
 
     private static string NormalizeWorkspacePath(string? value)

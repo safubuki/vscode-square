@@ -30,6 +30,8 @@ public sealed class WindowArranger
     private const int DwmwaTransitionsForceDisabled = 3;
     private const int DwmwaCloak = 13;
     private const int DwmwaCloaked = 14;
+    private static readonly TimeSpan MaximizeRequestTimeout = TimeSpan.FromMilliseconds(160);
+    private static readonly TimeSpan MaximizeStatePollInterval = TimeSpan.FromMilliseconds(8);
     private const uint GW_HWNDPREV = 3;
     private const int GWL_EXSTYLE = -20;
     private const int WS_EX_TOPMOST = 0x00000008;
@@ -114,6 +116,16 @@ public sealed class WindowArranger
             {
                 // 最大化/最小化中は不可視枠を正しく測れないため、通常状態のときに記録した
                 // キャッシュ値で復元先を補正する。
+                // フォーカス切替の静かな背面整列では、復元要求より先に旧フォーカスを新フォーカスの
+                // 直後へ置く。SW_SHOWNOACTIVATE が処理される瞬間から新フォーカスが覆いになるため、
+                // 旧フォーカスの縮小や Electron の白い再描画を表へ出さない。クロークは下地そのものを
+                // 消して白背景を露出させ得るため使わない。
+                if (!animateRestore && keepAboveHandle != IntPtr.Zero)
+                {
+                    ReleaseTopmostIfNeeded(placement.Handle);
+                    PlaceDirectlyBehind(placement.Handle, keepAboveHandle);
+                }
+
                 PresetRestoreBoundsToCell(CompensateForFrameCached(placement));
                 ShowWindow(placement.Handle, animateRestore ? SW_RESTORE : SW_SHOWNOACTIVATE);
                 if (animateRestore)
@@ -652,11 +664,13 @@ public sealed class WindowArranger
         return SetForegroundWindow(windowHandle);
     }
 
-    // 対象は直前に通常 z-order の先頭へ配置済み。最大化を開始してからフォアグラウンドを渡し、
-    // 通常サイズの Electron サーフェスをアクティブ化によって白く再描画させない。
+    // 対象は直前に通常 z-order の先頭へ配置済み。ShowWindow は ShowWindowAsync への別名なので、
+    // 要求直後に SetForegroundWindow すると最大化処理よりアクティブ化が先行し、通常サイズの
+    // Electron サーフェスが白いまま DWM のズーム素材になる。IsZoomed で最大化要求の反映を
+    // 確認してから一度だけフォアグラウンドを渡す。
     // 単独移動したスロットのフォーカス（1 面）を
     // その実効ディスプレイで開くために使う。ウィンドウが既にそのディスプレイに居れば移動しない。
-    public bool FocusMaximizedOnMonitor(IntPtr windowHandle, int monitorIndex)
+    public async Task<bool> FocusMaximizedOnMonitorAsync(IntPtr windowHandle, int monitorIndex)
     {
         if (windowHandle == IntPtr.Zero || !IsWindow(windowHandle))
         {
@@ -667,6 +681,14 @@ public sealed class WindowArranger
         try
         {
             ShowWindow(windowHandle, SW_MAXIMIZE);
+            var startedAt = DateTimeOffset.UtcNow;
+            while (IsWindow(windowHandle)
+                && !IsZoomed(windowHandle)
+                && DateTimeOffset.UtcNow - startedAt < MaximizeRequestTimeout)
+            {
+                await Task.Delay(MaximizeStatePollInterval);
+            }
+
             return SetForegroundWindow(windowHandle);
         }
         finally

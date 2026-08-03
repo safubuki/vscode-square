@@ -625,6 +625,69 @@
       </Style.Triggers>
     </Style>
 
+    <!-- 縮小モードのカード内に置く起動/終了トグル。領域が狭いので正方形 1 文字（起 / 終）で表す。
+         カード本体が Button なのでクリックは内側で握りつぶす（CompactSlotPowerButton_Click）。 -->
+    <Style x:Key="CompactSlotPowerButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButton}">
+      <Setter Property="Width" Value="18" />
+      <Setter Property="Height" Value="18" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="5,0,0,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="FontSize" Value="10" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+      <Setter Property="Focusable" Value="False" />
+      <!-- 既定は起動中（Ready）の姿＝終了ボタン。赤系で停止操作だと分かるようにする。 -->
+      <Setter Property="Content" Value="終" />
+      <Setter Property="ToolTip" Value="このスロットのウィンドウを終了" />
+      <Setter Property="Background" Value="#2A1A18" />
+      <Setter Property="BorderBrush" Value="#6A3832" />
+      <Setter Property="Foreground" Value="#F2B7AF" />
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="PowerButtonBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="4">
+              <ContentPresenter HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="PowerButtonBorder" Property="Opacity" Value="0.78" />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="PowerButtonBorder" Property="Opacity" Value="0.55" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding WindowStatus}" Value="{x:Static models:SlotWindowStatus.Missing}">
+          <Setter Property="Content" Value="起" />
+          <Setter Property="ToolTip" Value="このスロットのアプリを起動" />
+          <Setter Property="Background" Value="#16241C" />
+          <Setter Property="BorderBrush" Value="#335A43" />
+          <Setter Property="Foreground" Value="{StaticResource AccentBrush}" />
+        </DataTrigger>
+        <DataTrigger Binding="{Binding WindowStatus}" Value="{x:Static models:SlotWindowStatus.Launching}">
+          <Setter Property="Content" Value="…" />
+          <Setter Property="ToolTip" Value="起動中" />
+          <Setter Property="Background" Value="#2C2414" />
+          <Setter Property="BorderBrush" Value="#C49B38" />
+          <Setter Property="Foreground" Value="#E4C173" />
+          <Setter Property="IsEnabled" Value="False" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
     <Style x:Key="MicroCenterButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButton}">
       <Setter Property="MinHeight" Value="0" />
       <Setter Property="MinWidth" Value="0" />
@@ -663,6 +726,47 @@
               </Trigger>
               <Trigger Property="IsPressed" Value="True">
                 <Setter TargetName="MicroCenterBorder" Property="Background" Value="#0A1A11" />
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- 非表示中の円形トグル(縮小/極小モード)。標準モードの「表示」ボタンと同じ黄色にして、
+         どのモードでも「今は隠している＝押せば戻る」が一目で分かるようにする。
+         配色は VisibilityRestoreButtonStyle と揃える。形状・サイズは緑版と同一。 -->
+    <Style x:Key="MicroCenterRestoreButtonStyle" TargetType="Button" BasedOn="{StaticResource MicroCenterButtonStyle}">
+      <Setter Property="Background" Value="#F2CA57" />
+      <Setter Property="BorderBrush" Value="#FFF0B5" />
+      <Setter Property="Foreground" Value="#1A1406" />
+      <!-- 緑版のテンプレートはホバー/押下で Border の Background を名前指定で上書きするため、
+           Style 側の Setter では勝てない。テンプレートごと差し替えて黄色系の反応にする。 -->
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="MicroCenterRestoreBorder"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="11">
+              <ContentPresenter HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                RenderTransformOrigin="0.5,0.5">
+                <ContentPresenter.RenderTransform>
+                  <TranslateTransform Y="-1" />
+                </ContentPresenter.RenderTransform>
+              </ContentPresenter>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="MicroCenterRestoreBorder" Property="Background" Value="#F7DA83" />
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="MicroCenterRestoreBorder" Property="Background" Value="#D9AF3C" />
               </Trigger>
               <Trigger Property="IsEnabled" Value="False">
                 <Setter Property="Opacity" Value="0.45" />
@@ -1155,16 +1259,24 @@
               Click="MicroSlotButton_Click"
               ToolTip="{Binding DisplayTitle}"
               Style="{StaticResource MicroSlotButtonStyle}">
-        <!-- フォントの descender 領域がセル中央計算に含まれるため、
-             descender を持たない大文字を視覚的中央へ移すには RenderTransform で
-             上方向に補正する。レイアウトには影響せず純粋に描画位置だけ調整。 -->
-        <TextBlock Text="{Binding Name}"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center">
-          <TextBlock.RenderTransform>
-            <TranslateTransform Y="-1" />
-          </TextBlock.RenderTransform>
-        </TextBlock>
+        <!-- ラベルはタイトル先頭 1〜2 文字（MicroLabel）。全角 2 文字だとセル幅を超えうるので
+             Viewbox の DownOnly で溢れた分だけ縮める。1 文字や半角 2 文字は 14pt のまま。
+             フォントの descender 領域がセル中央計算に含まれるため、descender を持たない
+             文字を視覚的中央へ移すには RenderTransform で上方向に補正する。
+             レイアウトには影響せず純粋に描画位置だけ調整。 -->
+        <Viewbox Stretch="Uniform"
+                 StretchDirection="DownOnly"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center"
+                 Margin="3,0">
+          <TextBlock Text="{Binding MicroLabel}"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center">
+            <TextBlock.RenderTransform>
+              <TranslateTransform Y="-1" />
+            </TextBlock.RenderTransform>
+          </TextBlock>
+        </Viewbox>
       </Button>
     </DataTemplate>
 
@@ -1176,6 +1288,7 @@
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
           </Grid.ColumnDefinitions>
 
           <Border Style="{StaticResource CompactSlotBadgeStyle}">
@@ -1191,6 +1304,11 @@
                      FontWeight="SemiBold"
                      TextTrimming="CharacterEllipsis"
                      Foreground="{StaticResource TextBrush}" />
+
+          <Button Grid.Column="2"
+                  Tag="{Binding}"
+                  Click="CompactSlotPowerButton_Click"
+                  Style="{StaticResource CompactSlotPowerButtonStyle}" />
         </Grid>
       </Button>
     </DataTemplate>
