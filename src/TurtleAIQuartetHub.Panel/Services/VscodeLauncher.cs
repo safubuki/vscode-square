@@ -196,12 +196,16 @@ public sealed class VscodeLauncher
 
         DiagnosticLog.Write($"Starting fallback VS Code window for slot {slot.Name}: {codeCommand} {GetLaunchArguments(slot, config, null)}");
         var fallbackProcessId = await Task.Run(() => StartCode(codeCommand, slot, config, null), cancellationToken);
+
+        // cmd.exe ラッパー経由の場合、返る PID は cmd のものであって VS Code のものではない。
+        // その PID で待つと永久に一致しないため、ウィンドウ列挙による突合に切り替える。
+        var expectedProcessId = IsWrapperLaunch(codeCommand) ? null : fallbackProcessId;
         var fallbackWindow = await WaitForNewWindowAsync(
             slot,
             config,
             knownHandles,
             fallbackTimeout,
-            fallbackProcessId,
+            expectedProcessId,
             launchPath: null,
             fallbackWindowProvider: () => TryFindExistingSlotWindow(slot, config, null),
             cancellationToken);
@@ -569,6 +573,13 @@ public sealed class VscodeLauncher
                 Thread.CurrentThread.Priority = originalPriority;
             }
         }, cancellationToken);
+    }
+
+    // .exe 以外（code.cmd 等）は cmd.exe 経由で起動するため、Process.Start が返す PID は
+    // VS Code 本体ではなく cmd のものになる。PID 依存の待受を避ける判定に使う。
+    private static bool IsWrapperLaunch(string codeCommand)
+    {
+        return !string.Equals(Path.GetExtension(codeCommand), ".exe", StringComparison.OrdinalIgnoreCase);
     }
 
     private static uint? StartCode(string codeCommand, WindowSlot slot, AppConfig config, string? launchPath)

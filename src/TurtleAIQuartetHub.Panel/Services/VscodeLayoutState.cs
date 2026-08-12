@@ -87,6 +87,18 @@ public static class VscodeLayoutState
             return false;
         }
 
+        // storage.json は稼働中の VS Code もメモリに保持し、終了時に自分の状態を書き戻す。
+        // 標準プロファイル共有時（UseDedicatedUserDataDirs=false）は 4 窓が同じファイルを見るため、
+        // 他窓が生きている間にここで読み書きすると read-modify-write のロストアップデートになり、
+        // 幅以外のキー（チャットのモデル選択やサインイン状態など）ごと巻き戻る。
+        // 誰も開いていない時だけ書き、書く場合も対象キー以外は触らない。
+        if (IsAnyVsCodeWindowAlive())
+        {
+            DiagnosticLog.Write(
+                $"Skipped layout write for slot {slot.Name}: another VS Code window is running and shares storage.json.");
+            return false;
+        }
+
         try
         {
             var root = JsonNode.Parse(File.ReadAllText(storagePath)) as JsonObject;
@@ -142,6 +154,39 @@ public static class VscodeLayoutState
         return preference.SideBarWidth >= MinimumSideBarWidth
             || preference.AuxiliaryBarWidth >= MinimumAuxiliaryBarWidth
             || preference.AuxiliarySideBarWidth >= MinimumAuxiliaryBarWidth;
+    }
+
+    // VscodeLauncher.VsCodeProcessNames と対を成す。storage.json を共有し得るプロセス群。
+    private static readonly string[] StorageOwningProcessNames = ["Code", "Code - Insiders", "VSCodium", "Codium"];
+
+    private static bool IsAnyVsCodeWindowAlive()
+    {
+        foreach (var processName in StorageOwningProcessNames)
+        {
+            try
+            {
+                foreach (var process in System.Diagnostics.Process.GetProcessesByName(processName))
+                {
+                    using (process)
+                    {
+                        // Electron はレンダラ等の子プロセスも同名で並ぶ。storage.json を書き戻すのは
+                        // ウィンドウを持つメインプロセスだけなので、それだけを数える。
+                        if (process.MainWindowHandle != IntPtr.Zero)
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                // 列挙できない場合は「生きているかもしれない」側に倒し、書き込みを見送る。
+                DiagnosticLog.Write(ex);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static string GetStoragePath(WindowSlot slot, AppConfig config)
