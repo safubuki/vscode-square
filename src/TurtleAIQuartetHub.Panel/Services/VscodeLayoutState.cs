@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using TurtleAIQuartetHub.Panel.Models;
@@ -88,11 +89,21 @@ public static class VscodeLayoutState
         }
 
         // storage.json は稼働中の VS Code もメモリに保持し、終了時に自分の状態を書き戻す。
+        // 稼働中ウィンドウへの書き込みはフォーカス直前の Electron 再描画（白飛び）と、
+        // 終了時の巻き戻しの両方を起こすので行わない。
+        if (slot.WindowHandle != IntPtr.Zero && IsWindow(slot.WindowHandle))
+        {
+            DiagnosticLog.Write(
+                $"Skipped layout write for slot {slot.Name}: the slot window is already running.");
+            return false;
+        }
+
         // 標準プロファイル共有時（UseDedicatedUserDataDirs=false）は 4 窓が同じファイルを見るため、
         // 他窓が生きている間にここで読み書きすると read-modify-write のロストアップデートになり、
         // 幅以外のキー（チャットのモデル選択やサインイン状態など）ごと巻き戻る。
-        // 誰も開いていない時だけ書き、書く場合も対象キー以外は触らない。
-        if (IsAnyVsCodeWindowAlive())
+        // 共有時は誰も開いていない時だけ書き、書く場合も対象キー以外は触らない。
+        // 専用 user-data ではファイルがスロット別に分かれるので、他スロットが生きていても書いてよい。
+        if (!config.UseDedicatedUserDataDirs && IsAnyVsCodeWindowAlive())
         {
             DiagnosticLog.Write(
                 $"Skipped layout write for slot {slot.Name}: another VS Code window is running and shares storage.json.");
@@ -158,6 +169,9 @@ public static class VscodeLayoutState
 
     // VscodeLauncher.VsCodeProcessNames と対を成す。storage.json を共有し得るプロセス群。
     private static readonly string[] StorageOwningProcessNames = ["Code", "Code - Insiders", "VSCodium", "Codium"];
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hWnd);
 
     private static bool IsAnyVsCodeWindowAlive()
     {

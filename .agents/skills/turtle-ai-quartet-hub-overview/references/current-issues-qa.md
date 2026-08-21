@@ -1,9 +1,12 @@
 ﻿# 現在の既知課題と QA 方針
 
-更新日: 2026-07-23
+更新日: 2026-08-21
 
 ## 重点 QA
 - 既定状態で 4 つの VS Code を起動し、2x2 に配置できること。
+- 既定では VS Code の標準プロファイルを共有し、`%LOCALAPPDATA%/TurtleAIQuartetHub/user-data` にスロット別 Cache / WebStorage を作らないこと。過去の専用プロファイルが残っていれば起動後に回収されること。
+- 共有プロファイルでも、スロットのワークスペースパスとサイドバー幅は `slots.json` と実際の VS Code workspaceStorage から復元できること。チャットのモデル選択やサインイン状態が `storage.json` の書き換えで巻き戻らないこと。
+- VS Code が起動していないときにパネルを開くと、`%APPDATA%/Code` の再生成キャッシュ（Crashpad、CachedExtensionVSIXs、agent-host、GPUCache 等）が回収されること。`User`、設定、サインイン状態、チャット履歴（`WebStorage` / `globalStorage`）は残ること。VS Code 実行中は重いキャッシュ掃除をスキップすること。
 - 低速または標準スペック端末で VS Code の起動が遅れ、ウィンドウが中央付近に出た場合でも、専用 `user-data-dir` の既存 VS Code ウィンドウとして再接続され、C=左下など対象スロットへ戻ること。
 - 標準表示の丸いステータス LED は、停止中=赤、起動中=黄色、起動済み=緑で表示されること。
 - 各スロットで VS Code / Antigravity / Codex CLI / Claude CLI / GitHub Copilot CLI / Grok Build CLI / Gemini CLI を選択できること。
@@ -96,6 +99,7 @@
 
 ## 残リスク
 - VS Code / Antigravity のウィンドウタイトルや workspaceStorage の変更により、ワークスペース表示がずれる可能性がある。
+- 既定の共有プロファイルでは `code.lock` によるスロット再接続が使えない。ウィンドウタイトルと保存済みワークスペースでの再接続に依存する。
 - VS Code の `code.lock` の PID と実ウィンドウ PID が将来の Electron 実装変更で一致しなくなると、既存ウィンドウ再接続の追加調整が必要になる可能性がある。
 - terminal ホストや CLI 実体が環境で異なる場合、`applications[].detection.processNames` の追加設定が必要になる可能性がある。
 - Antigravity の起動ラッパーや初期化タイミングが変わると、遅延再配置の回数や待ち時間の調整が必要になる可能性がある。

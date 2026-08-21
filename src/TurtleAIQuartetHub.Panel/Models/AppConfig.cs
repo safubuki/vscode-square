@@ -23,9 +23,12 @@ public sealed class AppConfig
 
     public int Gap { get; set; } = 6;
 
-    public bool UseDedicatedUserDataDirs { get; set; } = true;
+    // 既定は標準 VS Code プロファイルを共有する。スロット別に user-data-dir を切ると
+    // Cache / WebStorage / CachedExtensionVSIXs が 4 倍になりディスクを圧迫する。
+    // ウィンドウ別のレイアウトは slots.json の PreferredLayout で覚える。
+    public bool UseDedicatedUserDataDirs { get; set; }
 
-    public bool InheritMainUserState { get; set; } = true;
+    public bool InheritMainUserState { get; set; }
 
     public bool ReopenLastWorkspace { get; set; } = true;
 

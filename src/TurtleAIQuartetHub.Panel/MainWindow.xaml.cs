@@ -149,6 +149,7 @@ public partial class MainWindow : Window
             UpdateCompactPanelFrame();
             RefreshAuxiliaryUi();
             RefreshLaunchButtonAvailability();
+            ScheduleUnusedUserDataReclaim();
         };
     }
 
@@ -1497,7 +1498,6 @@ public partial class MainWindow : Window
         }
 
         EnsurePreferredLayout(slot);
-        VscodeLayoutState.TryApplyPreferredLayout(slot, _statusStore.Config, slot.PreferredLayout);
         SetManagedWindowLayerState(WindowSlot.SlotWindowLayerMode.Topmost);
         PrepareFocusTransitionBackdrop(slot, arrangeOtherSlotsFirst: false);
         // 単独移動中ならその実効ディスプレイで最大化する。未移動なら従来どおりベース面で最大化。
@@ -3373,6 +3373,31 @@ public partial class MainWindow : Window
             _displayMode,
             _statusStore.WorkspaceApplications,
             _statusStore.AuxiliaryApplications);
+    }
+
+    private void ScheduleUnusedUserDataReclaim()
+    {
+        var config = _statusStore.Config;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                var reclaimed = SlotUserDataPaths.ReclaimUnusedUserData(config);
+                if (reclaimed > 0)
+                {
+                    var reclaimedMegabytes = reclaimed / (1024d * 1024d);
+                    DiagnosticLog.Write($"Reclaimed {reclaimed} bytes ({reclaimedMegabytes:0.0} MB) of unused VS Code cache.");
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        _statusStore.Message = $"VS Code の再生成キャッシュを {reclaimedMegabytes:0.0} MB 回収しました。";
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.Write(ex);
+            }
+        });
     }
 
     private void EnsurePreferredLayout(WindowSlot slot)

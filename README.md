@@ -187,7 +187,8 @@ Copy-Item .\config\turtle-ai-quartet-hub.example.json (Join-Path $configDir 'tur
 - `launchTimeoutSeconds`: VS Code / Antigravity / CLI 起動待ち時間
 - `remoteReconnectTimeoutSeconds`: SSH / Remote 接続の再接続待ち時間
 - `statusRefreshIntervalMilliseconds`: 管理中ウィンドウ状態とワークスペース表示の更新間隔
-- `inheritMainUserState`: 通常 VS Code の設定やスニペットをスロットへ引き継ぐか
+- `useDedicatedUserDataDirs`: スロット別に VS Code user-data-dir を切るか。既定は `false`（標準プロファイル共有）。`true` にするとウィンドウ識別は容易になるが、キャッシュがスロット数だけ増える
+- `inheritMainUserState`: 専用 user-data-dir 利用時に、通常 VS Code の設定やスニペットをスロットへ引き継ぐか。`globalStorage` や Chromium キャッシュはコピーしない
 - `defaultWorkspaceApplicationId`: スロットの既定アプリ。未設定時は `vscode`
 - `applications`: VS Code、Antigravity、Codex CLI、GitHub Copilot CLI、Gemini CLI、Claude CLI、Codex / ChatGPT / Claude Windows アプリなどの起動定義と検出候補
 - `slots[].applicationId`: スロットごとの起動対象アプリ

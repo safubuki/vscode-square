@@ -10,7 +10,7 @@ Turtle AI Code Quartet Hub は、4つの開発ワークスペースを A-D ス�
 
 - Win32 API で取得できる管理対象ウィンドウ（IDE / CLI / 補助 Windows アプリ）のハンドル、タイトル、プロセス ID、位置とサイズ。
 - ワークスペースパス、remote workspace URI、パネルタイトル、スロット割り当て、控えパネル、レイアウト設定。
-- `inheritMainUserState` が有効な場合に、スロット別 user-data-dir へコピーされる軽量な VS Code ユーザー状態。例: 設定、スニペット、一部の globalStorage。
+- `inheritMainUserState` が有効な場合に、スロット別 user-data-dir へコピーされる軽量な VS Code ユーザー状態。例: 設定、キーバインド、スニペット。`globalStorage` や Chromium キャッシュはコピーしない。
 
 AI 実行状態の推定、VS Code UI Automation 走査、VS Code 拡張ログの読み取りは行いません。
 

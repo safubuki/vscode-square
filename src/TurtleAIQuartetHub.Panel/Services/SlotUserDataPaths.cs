@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System.Diagnostics;
+using System.IO;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using TurtleAIQuartetHub.Panel.Models;
@@ -28,10 +29,37 @@ public static class SlotUserDataPaths
 
     private static readonly string[] SharedUserDirectories =
     [
-        "globalStorage",
         "snippets",
         "prompts"
     ];
+
+    // 消してよいのは再生成できるキャッシュだけ。
+    // 残すもの: User（設定・キーバインド・globalStorage・workspaceStorage）、
+    // WebStorage / Partitions / Local Storage / Session Storage（サインインとチャット履歴）。
+    private static readonly string[] RegenerableCacheDirectoryNames =
+    [
+        "Cache",
+        "CachedData",
+        "CachedExtensions",
+        "CachedExtensionVSIXs",
+        "CachedProfilesData",
+        "Code Cache",
+        "GPUCache",
+        "DawnGraphiteCache",
+        "DawnWebGPUCache",
+        "Crashpad",
+        "logs",
+        "VideoDecodeStats",
+        "blob_storage",
+        "clp",
+        "agent-host",
+        "copilot-terminal-output"
+    ];
+
+    private static readonly string[] VsCodeProcessNames = ["Code", "Code - Insiders", "VSCodium", "Codium"];
+
+    // クラッシュダンプは VS Code 実行中でも消してよい。
+    private static readonly string[] AlwaysSafeCacheDirectoryNames = ["Crashpad"];
 
     private static readonly string[] SharedRootFiles =
     [
@@ -96,6 +124,15 @@ public static class SlotUserDataPaths
             }
         }
 
+        try
+        {
+            PruneRegenerableCaches(targetDirectory);
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write(ex);
+        }
+
         // 各スロット専用プロファイルでは前回セッションのウィンドウ復元を必ず無効化する。
         // これを行わないと VS Code が --new-window で開くウィンドウに加えて前回開いていた
         // ウィンドウまで復元してしまい、余分なウィンドウが開いて 2x2 配置が崩れる。
@@ -108,6 +145,44 @@ public static class SlotUserDataPaths
         {
             DiagnosticLog.Write(ex);
         }
+    }
+
+    public static long ReclaimUnusedUserData(AppConfig config)
+    {
+        var reclaimed = 0L;
+        var slotUserDataRoot = Path.Combine(config.StateDirectory, "user-data");
+
+        // 共有プロファイル運用ではスロット別 user-data は使わない。過去の専用プロファイルが
+        // 残っていると Cache / WebStorage だけで数 GB になるため、起動時に回収する。
+        if (!config.UseDedicatedUserDataDirs && Directory.Exists(slotUserDataRoot))
+        {
+            reclaimed += TryDeleteDirectoryBestEffort(slotUserDataRoot);
+        }
+
+        var installedDirectory = GetInstalledUserDataDirectory(config.CodeCommand);
+        if (!string.IsNullOrWhiteSpace(installedDirectory))
+        {
+            reclaimed += PruneCacheDirectories(installedDirectory, AlwaysSafeCacheDirectoryNames);
+
+            if (IsAnyVsCodeProcessAlive())
+            {
+                DiagnosticLog.Write("Skipped heavy VS Code cache prune: a VS Code process is running.");
+            }
+            else
+            {
+                reclaimed += PruneCacheDirectories(installedDirectory, RegenerableCacheDirectoryNames);
+            }
+        }
+
+        if (config.UseDedicatedUserDataDirs && Directory.Exists(slotUserDataRoot))
+        {
+            foreach (var slotDirectory in Directory.EnumerateDirectories(slotUserDataRoot))
+            {
+                reclaimed += PruneRegenerableCaches(slotDirectory);
+            }
+        }
+
+        return reclaimed;
     }
 
     private static void EnsureLauncherManagedSettings(string targetDirectory)
@@ -290,6 +365,100 @@ public static class SlotUserDataPaths
         catch (Exception ex)
         {
             DiagnosticLog.Write(ex);
+        }
+    }
+
+    private static long PruneRegenerableCaches(string userDataDirectory)
+    {
+        return PruneCacheDirectories(userDataDirectory, RegenerableCacheDirectoryNames);
+    }
+
+    private static long PruneCacheDirectories(string userDataDirectory, IReadOnlyList<string> directoryNames)
+    {
+        if (!Directory.Exists(userDataDirectory))
+        {
+            return 0;
+        }
+
+        var reclaimed = 0L;
+        foreach (var directoryName in directoryNames)
+        {
+            reclaimed += TryDeleteDirectoryBestEffort(Path.Combine(userDataDirectory, directoryName));
+        }
+
+        return reclaimed;
+    }
+
+    private static bool IsAnyVsCodeProcessAlive()
+    {
+        foreach (var processName in VsCodeProcessNames)
+        {
+            try
+            {
+                var processes = Process.GetProcessesByName(processName);
+                var count = processes.Length;
+                foreach (var process in processes)
+                {
+                    process.Dispose();
+                }
+
+                if (count > 0)
+                {
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                DiagnosticLog.Write(ex);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static long TryDeleteDirectoryBestEffort(string directoryPath)
+    {
+        if (!Directory.Exists(directoryPath))
+        {
+            return 0;
+        }
+
+        var reclaimed = 0L;
+        try
+        {
+            foreach (var filePath in Directory.EnumerateFiles(directoryPath, "*", SearchOption.TopDirectoryOnly))
+            {
+                reclaimed += TryDeleteFile(filePath);
+            }
+
+            foreach (var childDirectory in Directory.EnumerateDirectories(directoryPath))
+            {
+                reclaimed += TryDeleteDirectoryBestEffort(childDirectory);
+            }
+
+            Directory.Delete(directoryPath, false);
+        }
+        catch (Exception ex)
+        {
+            DiagnosticLog.Write(ex);
+        }
+
+        return reclaimed;
+    }
+
+    private static long TryDeleteFile(string filePath)
+    {
+        try
+        {
+            var length = new FileInfo(filePath).Length;
+            File.Delete(filePath);
+            return length;
+        }
+        catch
+        {
+            // ロック中のキャッシュファイルは次回の回収に回す。大量の個別失敗で panel.log を埋めない。
+            return 0;
         }
     }
 }

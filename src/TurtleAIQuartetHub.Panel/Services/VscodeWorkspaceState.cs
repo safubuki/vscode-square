@@ -135,7 +135,7 @@ public static class VscodeWorkspaceState
         if (string.Equals(normalizedApplicationId, AppConfig.VsCodeApplicationId, StringComparison.OrdinalIgnoreCase))
         {
             yield return Path.Combine(
-                SlotUserDataPaths.GetUserDataDirectory(slotName, config),
+                SlotUserDataPaths.GetEffectiveUserDataDirectory(slotName, config),
                 "User",
                 "workspaceStorage");
             yield break;

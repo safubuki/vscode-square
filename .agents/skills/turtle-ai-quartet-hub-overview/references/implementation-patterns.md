@@ -1,6 +1,6 @@
 ﻿# Turtle AI Code Quartet Hub 実装パターン・注意点
 
-更新日: 2026-07-23
+更新日: 2026-08-21
 
 ## 1. AI 状態監視を戻さない
 - AI 状態検出、UI Automation のチャット走査、拡張ログ解析、VS Code 外枠オーバーレイは削除済み。
@@ -17,7 +17,8 @@
 
 ## 3. 複数アプリ起動
 - 既定のスロットアプリは VS Code (`vscode`)。一括起動はスロットごとの `ApplicationId` に従う。
-- VS Code は `VscodeLauncher` に残し、専用 user-data-dir、remote URI、workspaceStorage 読み取りの既存挙動を壊さない。
+- VS Code は `VscodeLauncher` に残し、remote URI と workspaceStorage 読み取りの既存挙動を壊さない。既定は標準プロファイル共有（`useDedicatedUserDataDirs=false`）。専用 user-data-dir は任意で、有効時だけ `code.lock` 再接続を使う。
+- VS Code の workspaceStorage は `GetEffectiveUserDataDirectory` を読む。共有プロファイル時にスロット別フォルダを見ると、保存済みワークスペースやレイアウトが空に見える。
 - Antigravity のワークスペース推定は VS Code 互換の `workspaceStorage` 形式を使い、`%APPDATA%/Antigravity/User/workspaceStorage` などの実アプリデータ候補を新しい順に見て、ウィンドウタイトルにワークスペース名が含まれるパスだけを採用する。
 - Antigravity など VS Code 以外の workspace IDE は `ApplicationLauncher` の汎用起動で扱う。起動プロセスと表示ウィンドウのプロセス ID がずれるため、新規ウィンドウハンドルで割り当てる。
 - Antigravity IDE は `%LOCALAPPDATA%/Programs/Antigravity IDE/Antigravity IDE.exe` 相当を優先検出する。過去設定の bare `antigravity` は新しい Antigravity Windows アプリと衝突しやすいため、既定検出へ戻して IDE 側を開く。
@@ -123,3 +124,13 @@
 - パネル終了確認を含むユーザー向け確認 UI に WPF 標準 `MessageBox` を使わない。OS 標準の灰色ダイアログは本体の緑基調デザインと統一できないため、`MainWindow.xaml` 内の既存オーバーレイパターン（暗い半透明背景、`SurfaceBrush`、`AccentBrush`）で表示する。
 - 新規VS Codeの起動前は、AIチャット等を表示する右側の `auxiliaryBarWidth` を基準画面幅の約28%（既定538px、420～620pxの範囲）まで必要時だけ広げる。既に広いユーザー設定は縮めない。`auxiliarySideBarWidth` が既に存在する形式では同じ下限を適用するが、未使用環境へ新しい値を勝手に追加しない。フォーカス直前やVS Code以外のウィンドウには適用しない。
 - 新規VS Codeの起動時は、WinEventで新しいHWNDを捕捉した時点で `DWMWA_CLOAK` を設定し、2x2配置と160msの初回描画猶予が完了してから解除する。これによりElectronの白い初期サーフェスや中央の初期位置を見せない。再接続した既存ウィンドウはクロークしない。配置処理が失敗しても12秒後に必ず解除するフェイルセーフを持つ。右側 `auxiliaryBarWidth` の拡張も新規ウィンドウ起動前に済ませ、フォーカス直前に `storage.json` を変更して4面を再描画させない。
+
+## 10. VS Code プロファイルとディスク消費（2026-08-21 追加）
+- **問題**: スロット別に `--user-data-dir` を切ると、設定だけでなく Cache / WebStorage / CachedExtensionVSIXs / agent-host まで 4 コピーになり数 GB を消費する。逆に標準プロファイルを共有するとディスクは 1 倍だが、`storage.json` を稼働中に書き換えるとチャットモデル選択やサインイン状態が巻き戻る。
+- **対策**: 既定は `UseDedicatedUserDataDirs=false` と `InheritMainUserState=false`。ウィンドウ別レイアウトは `slots.json` の `PreferredLayout` に保存する。`storage.json` は対象キーだけを触り、共有プロファイルでは VS Code が生きている間は書かない。専用プロファイルでも稼働中スロット自身の `storage.json` は書かない（白飛びと巻き戻し防止）。
+- **ファイル**: `AppConfig.cs`, `SlotUserDataPaths.cs`, `VscodeLayoutState.cs`, `VscodeWorkspaceState.cs`
+- **inherit**: 専用プロファイルへ引き継ぐのは settings / keybindings / snippets / prompts / mcp.json のみ。`globalStorage` と Chromium ストレージはコピーしない。
+- **回収**: 共有プロファイル運用では `%LOCALAPPDATA%/TurtleAIQuartetHub/user-data` の残存専用プロファイルを起動時に削除する。専用運用でも各スロット起動前に消すのは再生成キャッシュだけ。
+- **必ず残すもの**: `User`（settings / keybindings / globalStorage / workspaceStorage）、`WebStorage`、`Partitions`、`Local Storage`、`Session Storage`。サインイン状態とチャット履歴は消さない。毎回の再ログインを発生させない。
+- **消してよいもの**: `Crashpad`（実行中でも可）、Cache / CachedData / CachedExtensionVSIXs / logs / agent-host / GPUCache など再生成できるキャッシュのみ。VS Code プロセスが一つも無いときだけ重いキャッシュを削除する。初回起動はキャッシュ再生成のため少し遅くなることがある。
+- **注意**: 専用 user-data-dir を再有効化するとディスクが増える。ウィンドウ識別のため必要でも、キャッシュのコピーや `globalStorage` 丸ごとコピーは戻さない。フォーカス切替中に `storage.json` を書かない。VS Code 実行中は共有プロファイルのキャッシュを触らない。
