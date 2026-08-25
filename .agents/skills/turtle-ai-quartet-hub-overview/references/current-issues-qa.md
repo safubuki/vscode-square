@@ -1,6 +1,6 @@
 ﻿# 現在の既知課題と QA 方針
 
-更新日: 2026-08-21
+更新日: 2026-08-25
 
 ## 重点 QA
 - 既定状態で 4 つの VS Code を起動し、2x2 に配置できること。
@@ -16,6 +16,8 @@
 - GitHub Copilot CLI は対象ワークスペースで `copilot` だけを実行し、ワークスペースパスを引数として渡さないこと。
 - GitHub Copilot Chat 拡張の `globalStorage\github.copilot-chat\copilotCli\copilot*` だけが存在する環境では、GitHub Copilot CLI を未検出として扱うこと。
 - VS Code から CLI、CLI から VS Code、CLI から別 CLI へ、現在のスロットウィンドウを閉じてから押したアプリへ切り替えられること。
+- Antigravity から VS Code へ切り替えるとき、旧 Antigravity の HWND が消滅した後にだけ VS Code を起動し、旧ウィンドウが背後へ残らないこと。
+- 管理ウィンドウが未保存確認等で8秒以内に閉じない場合は、アプリ切替・控え移動・パネル情報削除を中止し、旧ウィンドウを元スロットの管理対象として維持すること。
 - 未起動スロットで IDE / CLI ボタンを押しても自動起動せず、起動対象の選択だけが変わること。
 - 一括起動で Codex / Gemini など複数 CLI 種別が混在しても、それぞれの terminal が対象スロットの象限へ配置されること。
 - Codex / ChatGPT / Claude / Antigravity2 の Windows アプリ版ボタンが、`Windows` ラベル付きで控え Quartet と同じ行の右端に表示され、Antigravity2 が Claude の右側にあること。
@@ -26,6 +28,7 @@
 - Antigravity でウィンドウ起動後にアプリ内から対象フォルダを開いた場合も、`%APPDATA%/Antigravity/User/workspaceStorage` とウィンドウタイトルから最新ワークスペースパスを保存できること。
 - 正しく開けたワークスペースは、タイトルと保存済みパスに反映されること。
 - 各スロット右上のゴミ箱アイコンで visible slot の保存情報を削除でき、起動中の IDE / CLI ウィンドウも閉じること。
+- 個別閉じる・一括閉じるは `WM_CLOSE` の送信成功だけで未起動表示にせず、対象 HWND の消滅を確認できたスロットだけ管理解除すること。一括閉じるで失敗した対象は管理を継続すること。
 - 各スロット右上のゴミ箱アイコンは、削除確認ダイアログで `削除する` を押すまで削除しないこと。
 - 通常表示の各スロット左下にフォルダアイコンボタンが表示され、ローカルワークスペースのフォルダまたは `.code-workspace` の親フォルダを Explorer で開けること。
 - `vscode-remote://ssh-remote+...` や `ssh://...` など SSH / remote ワークスペースでは、フォルダアイコンボタンがグレーアウトし、Explorer 起動を行わないこと。

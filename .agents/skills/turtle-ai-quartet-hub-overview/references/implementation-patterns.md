@@ -1,6 +1,6 @@
 ﻿# Turtle AI Code Quartet Hub 実装パターン・注意点
 
-更新日: 2026-08-21
+更新日: 2026-08-25
 
 ## 1. AI 状態監視を戻さない
 - AI 状態検出、UI Automation のチャット走査、拡張ログ解析、VS Code 外枠オーバーレイは削除済み。
@@ -134,3 +134,10 @@
 - **必ず残すもの**: `User`（settings / keybindings / globalStorage / workspaceStorage）、`WebStorage`、`Partitions`、`Local Storage`、`Session Storage`。サインイン状態とチャット履歴は消さない。毎回の再ログインを発生させない。
 - **消してよいもの**: `Crashpad`（実行中でも可）、Cache / CachedData / CachedExtensionVSIXs / logs / agent-host / GPUCache など再生成できるキャッシュのみ。VS Code プロセスが一つも無いときだけ重いキャッシュを削除する。初回起動はキャッシュ再生成のため少し遅くなることがある。
 - **注意**: 専用 user-data-dir を再有効化するとディスクが増える。ウィンドウ識別のため必要でも、キャッシュのコピーや `globalStorage` 丸ごとコピーは戻さない。フォーカス切替中に `storage.json` を書かない。VS Code 実行中は共有プロファイルのキャッシュを触らない。
+
+## 11. 管理ウィンドウの終了確認とメモリ安全性（2026-08-25 追加）
+- `PostMessage(WM_CLOSE)` の成功は終了完了ではない。個別閉じる、一括閉じる、アプリ切替、控え移動、パネル情報削除は `ManagedWindowCloseService.CloseAndWaitAsync` を通し、HWND の消滅確認後だけ `StatusStore.ClearWindow` を行う。
+- 外部 IDE が未保存確認や終了処理で8秒以内に閉じなかった場合は、対象 HWND を管理したまま操作を中止する。旧 Antigravity が残った状態で VS Code を追加起動したり、パネルだけ未起動表示へ変えたりしない。
+- 一括閉じるは全対象へ並列に close 要求と終了確認を行う。終了確認できたスロットだけをクリアし、未終了スロットは管理を継続する。
+- メモリ削減目的で外部 IDE へ `EmptyWorkingSet`、`--disable-gpu`、`--disable-extensions`、プロセス強制 kill を既定適用しない。一時的な working set 減少より、ページフォルト増加、描画回帰、AI拡張停止、未保存データ消失のリスクが大きい。
+- 4ウィンドウ時の安全な基本策は、不要な管理ウィンドウを確実に閉じることと、既定の `UseDedicatedUserDataDirs=false` を維持してプロファイルを共有すること。後者は主にディスク重複を防ぐもので、Electron renderer / extension host の実メモリは各IDEの利用内容に依存する。

@@ -62,6 +62,7 @@ public partial class MainWindow : Window
     ];
     private readonly WindowEnumerator _windowEnumerator = new();
     private readonly WindowArranger _windowArranger = new();
+    private readonly ManagedWindowCloseService _managedWindowCloseService;
     private readonly FocusNameOverlay _focusNameOverlay;
     private readonly VscodeLauncher _vscodeLauncher;
     private readonly ApplicationLauncher _applicationLauncher;
@@ -112,6 +113,7 @@ public partial class MainWindow : Window
 
         var config = AppConfig.Load();
         _statusStore = new StatusStore(config);
+        _managedWindowCloseService = new ManagedWindowCloseService(_windowEnumerator, _windowArranger);
         _vscodeLauncher = new VscodeLauncher(_windowEnumerator);
         _applicationLauncher = new ApplicationLauncher(_windowEnumerator, _vscodeLauncher);
         DataContext = _statusStore;
@@ -912,10 +914,10 @@ public partial class MainWindow : Window
         CancelCloseAllButton.Focus();
     }
 
-    private void ConfirmCloseAllButton_Click(object sender, RoutedEventArgs e)
+    private async void ConfirmCloseAllButton_Click(object sender, RoutedEventArgs e)
     {
         HideCloseAllConfirmDialog();
-        CloseAllManagedWindows();
+        await CloseAllManagedWindowsAsync();
     }
 
     private void CancelCloseAllButton_Click(object sender, RoutedEventArgs e)
@@ -923,43 +925,68 @@ public partial class MainWindow : Window
         HideCloseAllConfirmDialog();
     }
 
-    private void CloseAllManagedWindows()
+    private async Task CloseAllManagedWindowsAsync()
     {
-        var closedSlots = new List<WindowSlot>();
-        var closed = 0;
-        foreach (var slot in _statusStore.Slots)
+        if (_isBusy)
         {
-            if (!_windowArranger.Close(slot.WindowHandle))
-            {
-                continue;
-            }
-
-            closedSlots.Add(slot);
-            closed++;
+            return;
         }
 
-        if (closedSlots.Count > 0)
+        await RunBusyAsync(async () =>
         {
+            var closeTargets = _statusStore.Slots
+                .Where(slot => slot.WindowHandle != IntPtr.Zero)
+                .Select(slot => (Slot: slot, Handle: slot.WindowHandle))
+                .ToList();
+            if (closeTargets.Count == 0)
+            {
+                _statusStore.Message = "閉じる管理中ウィンドウがありません。";
+                RefreshAuxiliaryUi();
+                return;
+            }
+
+            // WM_CLOSE 後では対象 HWND が既に消えている可能性があるため、先に状態を保存する。
             _statusStore.SaveCurrentSettings();
-            foreach (var slot in closedSlots)
+            _statusStore.ClearFocusedSlot();
+            foreach (var target in closeTargets)
             {
-                slot.IsHidden = false;
-                _statusStore.ClearWindow(slot);
+                _windowArranger.ReleaseTopmost(target.Handle);
             }
-        }
 
-        _areWindowsHidden = _statusStore.Slots.Any(slot => slot.WindowHandle != IntPtr.Zero && slot.IsHidden);
-        if (!_areWindowsHidden)
-        {
-            _hiddenFocusedSlots.Clear();
-        }
+            // 4 枚を順番に最大8秒ずつ待つと操作不能時間が長くなるため、close 要求と確認は並列に行う。
+            var results = await Task.WhenAll(closeTargets.Select(async target =>
+                (target.Slot, target.Handle, Result: await _managedWindowCloseService.CloseAndWaitAsync(target.Handle))));
 
-        UpdateVisibilityButtonVisual();
+            var closed = 0;
+            foreach (var result in results)
+            {
+                if (!result.Result.Succeeded)
+                {
+                    DiagnosticLog.Write(
+                        LogLevel.Warn,
+                        $"Managed window close did not complete for slot {result.Slot.Name}: "
+                        + $"handle=0x{result.Handle.ToInt64():X}, status={result.Result.Status}.");
+                    continue;
+                }
 
-        _statusStore.Message = closed == 0
-            ? "閉じる管理中ウィンドウがありません。"
-            : $"{closed}個の管理中ウィンドウを閉じて設定を保存しました。";
-        RefreshAuxiliaryUi();
+                if (result.Slot.WindowHandle == result.Handle)
+                {
+                    result.Slot.IsHidden = false;
+                    _statusStore.ClearWindow(result.Slot);
+                }
+
+                closed++;
+            }
+
+            RefreshHiddenWindowsState();
+            UpdateVisibilityButtonVisual();
+
+            var notClosed = closeTargets.Count - closed;
+            _statusStore.Message = notClosed == 0
+                ? $"{closed}個の管理中ウィンドウを閉じて設定を保存しました。"
+                : $"{closed}個を閉じました。{notClosed}個は終了を確認できなかったため管理を継続します。";
+            RefreshAuxiliaryUi();
+        });
     }
 
     private void SlotCard_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -1857,24 +1884,26 @@ public partial class MainWindow : Window
         RefreshAuxiliaryUi();
     }
 
-    private void CloseSlotButton_Click(object sender, RoutedEventArgs e)
+    private async void CloseSlotButton_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not FrameworkElement { Tag: WindowSlot slot })
+        if (_isBusy || sender is not FrameworkElement { Tag: WindowSlot slot })
         {
             return;
         }
 
-        if (_windowArranger.Close(slot.WindowHandle))
+        await CloseSlotAsync(slot);
+    }
+
+    private async Task CloseSlotAsync(WindowSlot slot)
+    {
+        await RunBusyAsync(async () =>
         {
-            _statusStore.CaptureWorkspacePath(slot);
-            _statusStore.ClearWindow(slot);
-            _statusStore.Message = $"スロット{slot.Name}を閉じました。";
+            var result = await CloseTrackedSlotWindowAsync(slot);
+            _statusStore.Message = result.Succeeded
+                ? $"スロット{slot.Name}を閉じました。"
+                : BuildCloseFailureMessage(slot, result);
             RefreshAuxiliaryUi();
-            return;
-        }
-
-        _statusStore.Message = $"スロット{slot.Name}の{slot.ApplicationDisplayName}ウィンドウが見つかりません。";
-        RefreshAuxiliaryUi();
+        });
     }
 
     private void OpenSlotWorkspaceFolderButton_Click(object sender, RoutedEventArgs e)
@@ -1960,41 +1989,33 @@ public partial class MainWindow : Window
 
         await RunBusyAsync(async () =>
         {
-        var hadWindow = slot.WindowHandle != IntPtr.Zero;
-        if (hadWindow)
-        {
-            var windowHandle = slot.WindowHandle;
-            if (_windowEnumerator.IsLiveWindow(windowHandle))
+            var hadWindow = slot.WindowHandle != IntPtr.Zero;
+            if (hadWindow)
             {
-                _statusStore.ClearFocusedSlot();
-                _windowArranger.ReleaseTopmost(windowHandle);
-                if (!_windowArranger.Close(windowHandle))
+                var result = await CloseTrackedSlotWindowAsync(slot);
+                if (!result.Succeeded)
                 {
-                    _statusStore.Message = $"スロット{slot.Name}のウィンドウを閉じられなかったため、パネル情報は削除していません。";
+                    _statusStore.Message = BuildCloseFailureMessage(
+                        slot,
+                        result,
+                        "パネル情報は削除していません。");
                     return;
                 }
-
-                for (var attempt = 0; attempt < 12 && _windowEnumerator.IsLiveWindow(windowHandle); attempt++)
-                {
-                    await Task.Delay(100);
-                }
             }
-        }
 
-        var slotName = slot.Name;
-        _statusStore.ClearFocusedSlot();
-        _statusStore.ClearSlotPanelInfo(slot);
-        _areWindowsHidden = _statusStore.Slots.Any(item => item.WindowHandle != IntPtr.Zero && item.IsHidden);
-        if (!_areWindowsHidden)
-        {
-            _hiddenFocusedSlots.Clear();
-            ArrangeSlotsAfterPanelStateChange();
-        }
+            var slotName = slot.Name;
+            _statusStore.ClearFocusedSlot();
+            _statusStore.ClearSlotPanelInfo(slot);
+            RefreshHiddenWindowsState();
+            if (!_areWindowsHidden)
+            {
+                ArrangeSlotsAfterPanelStateChange();
+            }
 
-        _statusStore.Message = hadWindow
-            ? $"スロット{slotName}のウィンドウを閉じ、パネル情報をクリアしました。"
-            : $"スロット{slotName}のパネル情報をクリアしました。";
-        RefreshAuxiliaryUi();
+            _statusStore.Message = hadWindow
+                ? $"スロット{slotName}のウィンドウを閉じ、パネル情報をクリアしました。"
+                : $"スロット{slotName}のパネル情報をクリアしました。";
+            RefreshAuxiliaryUi();
         });
     }
 
@@ -2012,8 +2033,7 @@ public partial class MainWindow : Window
 
         if (slot.WindowStatus == SlotWindowStatus.Ready)
         {
-            // 停止: 既存の CloseSlotButton_Click と同じ
-            CloseSlotButton_Click(sender, e);
+            await CloseSlotAsync(slot);
             return;
         }
 
@@ -2134,23 +2154,6 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (slot.WindowHandle != IntPtr.Zero)
-            {
-                if (_statusStore.IsVsCodeSlot(slot))
-                {
-                    _statusStore.CaptureWorkspacePath(slot);
-                }
-
-                if (!_windowArranger.Close(slot.WindowHandle))
-                {
-                    _statusStore.Message = $"スロット{slot.Name}の現在のアプリを閉じられませんでした。";
-                    return;
-                }
-
-                await Task.Delay(450);
-                _statusStore.ClearWindow(slot);
-            }
-
             if (!slot.HasPanelContent)
             {
                 slot.PanelTitle = _statusStore.MakeUniqueTitle($"スロット{slot.Name}", slot);
@@ -2182,41 +2185,76 @@ public partial class MainWindow : Window
 
     private async Task<bool> CloseSlotWindowForReplacementAsync(WindowSlot slot)
     {
-        var currentHandle = slot.WindowHandle;
-        if (currentHandle == IntPtr.Zero)
+        var result = await CloseTrackedSlotWindowAsync(slot);
+        if (!result.Succeeded)
         {
-            return true;
-        }
-
-        _statusStore.CaptureWorkspacePath(slot);
-
-        // 置き換え対象スロットがあるディスプレイのフォーカスだけ解除し、
-        // 他ディスプレイの 1 面表示（フォーカス）は保つ。
-        ClearFocusedSlotForDisplay(GetSlotMonitorIndex(slot));
-        _windowArranger.ReleaseTopmost(currentHandle);
-
-        if (_windowEnumerator.IsLiveWindow(currentHandle) && !_windowArranger.Close(currentHandle))
-        {
-            _statusStore.Message = $"スロット{slot.Name}の現在のウィンドウを閉じられませんでした。";
+            _statusStore.Message = BuildCloseFailureMessage(
+                slot,
+                result,
+                "新しいアプリへの切り替えを中止しました。");
             return false;
-        }
-
-        for (var attempt = 0; attempt < 12 && _windowEnumerator.IsLiveWindow(currentHandle); attempt++)
-        {
-            await Task.Delay(100);
-        }
-
-        _statusStore.ClearWindow(slot);
-        _areWindowsHidden = _statusStore.Slots.Any(item => item.WindowHandle != IntPtr.Zero && item.IsHidden);
-        if (!_areWindowsHidden)
-        {
-            _hiddenFocusedSlots.Clear();
         }
 
         return true;
     }
 
-    private void StoreSlotButton_Click(object sender, RoutedEventArgs e)
+    private async Task<ManagedWindowCloseResult> CloseTrackedSlotWindowAsync(WindowSlot slot)
+    {
+        var currentHandle = slot.WindowHandle;
+        if (currentHandle == IntPtr.Zero)
+        {
+            return new ManagedWindowCloseResult(ManagedWindowCloseStatus.AlreadyClosed);
+        }
+
+        _statusStore.CaptureWorkspacePath(slot);
+
+        // 対象があるディスプレイのフォーカスだけ解除し、他ディスプレイの 1 面表示は保つ。
+        ClearFocusedSlotForDisplay(GetSlotMonitorIndex(slot));
+        _windowArranger.ReleaseTopmost(currentHandle);
+
+        var result = await _managedWindowCloseService.CloseAndWaitAsync(currentHandle);
+        if (!result.Succeeded)
+        {
+            DiagnosticLog.Write(
+                LogLevel.Warn,
+                $"Managed window close did not complete for slot {slot.Name}: "
+                + $"application={slot.ApplicationId}, handle=0x{currentHandle.ToInt64():X}, status={result.Status}.");
+            return result;
+        }
+
+        // 待機中に別処理が新しい HWND を割り当てた場合は、その割り当てを消さない。
+        if (slot.WindowHandle == currentHandle)
+        {
+            slot.IsHidden = false;
+            _statusStore.ClearWindow(slot);
+        }
+
+        RefreshHiddenWindowsState();
+        return result;
+    }
+
+    private void RefreshHiddenWindowsState()
+    {
+        _areWindowsHidden = _statusStore.Slots.Any(item => item.WindowHandle != IntPtr.Zero && item.IsHidden);
+        if (!_areWindowsHidden)
+        {
+            _hiddenFocusedSlots.Clear();
+        }
+    }
+
+    private static string BuildCloseFailureMessage(
+        WindowSlot slot,
+        ManagedWindowCloseResult result,
+        string? followUp = null)
+    {
+        var reason = result.Status == ManagedWindowCloseStatus.RequestFailed
+            ? "終了要求を送信できませんでした。"
+            : $"{ManagedWindowCloseService.DefaultTimeout.TotalSeconds:0}秒以内にウィンドウの終了を確認できませんでした。";
+        var suffix = string.IsNullOrWhiteSpace(followUp) ? "管理を継続します。" : followUp;
+        return $"スロット{slot.Name}の{slot.ApplicationDisplayName}を閉じられませんでした。{reason}{suffix}";
+    }
+
+    private async void StoreSlotButton_Click(object sender, RoutedEventArgs e)
     {
         if (_isBusy)
         {
@@ -2228,31 +2266,38 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (slot.WindowHandle != IntPtr.Zero && !_windowArranger.Close(slot.WindowHandle))
+        await RunBusyAsync(async () =>
         {
-            _statusStore.Message = $"スロット{slot.Name}を控えに移す前に {slot.ApplicationDisplayName} を閉じられませんでした。";
-            return;
-        }
+            if (slot.WindowHandle != IntPtr.Zero)
+            {
+                var result = await CloseTrackedSlotWindowAsync(slot);
+                if (!result.Succeeded)
+                {
+                    _statusStore.Message = BuildCloseFailureMessage(
+                        slot,
+                        result,
+                        "控えへの移動を中止しました。");
+                    return;
+                }
+            }
 
-        _statusStore.CaptureWorkspacePath(slot);
-        // 控えへ移すスロットがあるディスプレイのフォーカスだけ解除し、他ディスプレイは保つ。
-        ClearFocusedSlotForDisplay(GetSlotMonitorIndex(slot));
-        if (!_statusStore.TryStoreSlotInBack(slot, out var storedPanel))
-        {
-            _statusStore.Message = _statusStore.StoredPanels.All(item => item.HasContent)
-                ? "控え Quartet が満杯のため保存できません。"
-                : $"スロット{slot.Name}に控え保存できるワークスペースがありません。";
-            return;
-        }
+            if (!_statusStore.TryStoreSlotInBack(slot, out var storedPanel))
+            {
+                _statusStore.Message = _statusStore.StoredPanels.All(item => item.HasContent)
+                    ? "控え Quartet が満杯のため保存できません。"
+                    : $"スロット{slot.Name}に控え保存できるワークスペースがありません。";
+                return;
+            }
 
-        if (!_areWindowsHidden)
-        {
-            // 他ディスプレイのフォーカス（1 面表示）を保ったまま再配置する。
-            ArrangeSlotsAfterPanelStateChange();
-        }
+            if (!_areWindowsHidden)
+            {
+                // 他ディスプレイのフォーカス（1 面表示）を保ったまま再配置する。
+                ArrangeSlotsAfterPanelStateChange();
+            }
 
-        _statusStore.Message = $"スロット{slot.Name}を{storedPanel!.Label}へ控え保存しました。";
-        RefreshAuxiliaryUi();
+            _statusStore.Message = $"スロット{slot.Name}を{storedPanel!.Label}へ控え保存しました。";
+            RefreshAuxiliaryUi();
+        });
     }
 
     private async void ShowStoredPanelButton_Click(object sender, RoutedEventArgs e)
