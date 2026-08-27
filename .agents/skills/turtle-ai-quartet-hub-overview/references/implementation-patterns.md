@@ -1,6 +1,6 @@
 ﻿# Turtle AI Code Quartet Hub 実装パターン・注意点
 
-更新日: 2026-08-25
+更新日: 2026-08-27
 
 ## 1. AI 状態監視を戻さない
 - AI 状態検出、UI Automation のチャット走査、拡張ログ解析、VS Code 外枠オーバーレイは削除済み。
@@ -12,7 +12,7 @@
 - `WindowSlot` は管理対象ウィンドウ、タイトル、ワークスペース、フォーカス、表示/非表示、レイヤー状態だけを持つ。
 - パネルカードを A-D 間でドラッグ移動するときは、表示位置の `Name` と VS Code user-data / workspaceStorage / code.lock 用の `RuntimeSlotName` を分けて扱う。実行中ウィンドウを B から D に移した場合、D は B の runtime profile を持ち続け、空いた B は D の runtime profile で新規起動することで、同じ user-data を二重に再利用しない。
 - VS Code / Antigravity の workspaceStorage 読み取りに失敗しても `SavedWorkspacePath` は消さない。強制終了後や中途半端な user-data 状態でも、次回起動に使える保存済みパスを残す。
-- 起動確認または periodic refresh で正しいワークスペースが読めた場合は、`Path` / `SavedWorkspacePath` / `SavedWorkspaceConfirmed` と自動タイトルを保存する。
+- 起動確認または periodic refresh で正しいワークスペースが読めた場合は、`Path` / `SavedWorkspacePath` / `SavedWorkspaceConfirmed` と自動タイトルを保存する。タイトル照合はフォルダ名の部分文字列ではなく、VS Code タイトルのワークスペース段を使う。ファイル名に `2025` などが含まれても `2025` フォルダへ保存をすり替えてはならない。
 - 控え Quartet から表示スロットへ復帰するときは、旧ウィンドウへ close を送っただけで次の起動へ進めない。置換用の close 待ち処理を通し、VS Code の再接続では起動予定の `SavedWorkspacePath` / `Path` とタイトルが一致しない既存 slot-owned window を採用しない。旧 workspace のウィンドウを新しいパネル表示へ誤接続すると、パネル名と実ワークスペースが永続的にずれる。
 
 ## 3. 複数アプリ起動
@@ -141,3 +141,9 @@
 - 一括閉じるは全対象へ並列に close 要求と終了確認を行う。終了確認できたスロットだけをクリアし、未終了スロットは管理を継続する。
 - メモリ削減目的で外部 IDE へ `EmptyWorkingSet`、`--disable-gpu`、`--disable-extensions`、プロセス強制 kill を既定適用しない。一時的な working set 減少より、ページフォルト増加、描画回帰、AI拡張停止、未保存データ消失のリスクが大きい。
 - 4ウィンドウ時の安全な基本策は、不要な管理ウィンドウを確実に閉じることと、既定の `UseDedicatedUserDataDirs=false` を維持してプロファイルを共有すること。後者は主にディスク重複を防ぐもので、Electron renderer / extension host の実メモリは各IDEの利用内容に依存する。
+
+## 12. ワークスペースタイトル照合（2026-08-27 追加）
+- **ファイル**: `VscodeWorkspaceState.cs`, `TurtleAIQuartetHub.Panel.Tests/VscodeWorkspaceStateTests.cs`
+- **問題**: 共有プロファイルの `workspaceStorage` 候補を `windowTitle.Contains(フォルダ名)` で採用していた。`turtle-20250502-gem.md - zenn-contents - Visual Studio Code` のようなタイトルだと、ファイル名中の `2025` が別フォルダ `2025` に先にマッチし、開いている `zenn-contents` ではなく `2025` が `SavedWorkspacePath` へ保存された。再起動すると間違ったフォルダが開く。
+- **対策**: タイトルからアプリ名接尾辞を除き、` - ` 区切りの段と照合する。完全一致、SSH などの ` [..]` / ` (..)` 接尾辞、パス末尾を優先し、部分文字列ではマッチさせない。複数候補がある場合はより具体的なフォルダ名を選ぶ。`.code-workspace` は二重拡張子として名前から取り除く。
+- **注意**: `Contains` によるタイトル照合を戻さない。短いフォルダ名（`hub`, `Code`, `2025`）は長いワークスペース名やファイル名の一部に現れやすい。回帰テストは `dotnet run --project .\src\TurtleAIQuartetHub.Panel.Tests\TurtleAIQuartetHub.Panel.Tests.csproj` に含める。

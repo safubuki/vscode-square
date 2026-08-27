@@ -16,6 +16,15 @@ public static class VscodeWorkspaceState
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, CachedScan> ScanCache =
         new(StringComparer.OrdinalIgnoreCase);
     private static readonly TimeSpan ScanCacheTtl = TimeSpan.FromSeconds(60);
+    private static readonly string[] AppTitleSuffixes =
+    [
+        " - Visual Studio Code - Insiders",
+        " - Visual Studio Code",
+        " - VSCodium",
+        " - Code - OSS",
+        " - Antigravity IDE",
+        " - Antigravity",
+    ];
 
     private sealed record CachedScan(
         DateTime ScannedAtUtc,
@@ -34,15 +43,44 @@ public static class VscodeWorkspaceState
 
     public static string? TryReadCurrentWorkspacePath(string? applicationId, string slotName, string windowTitle, AppConfig config)
     {
-        foreach (var candidate in TryReadWorkspacePathCandidates(applicationId, slotName, config))
+        return TryPickWorkspacePathVisibleInWindowTitle(
+            windowTitle,
+            TryReadWorkspacePathCandidates(applicationId, slotName, config)
+                .Select(candidate => candidate.WorkspacePath));
+    }
+
+    /// <summary>
+    /// ウィンドウタイトルに実際のワークスペースとして見えているパスを選ぶ。
+    /// ファイル名に含まれる数字や短い部分文字列ではマッチさせず、
+    /// 複数候補がある場合はより具体的なフォルダ名を優先する。
+    /// </summary>
+    public static string? TryPickWorkspacePathVisibleInWindowTitle(
+        string? windowTitle,
+        IEnumerable<string> workspacePaths)
+    {
+        if (string.IsNullOrWhiteSpace(windowTitle))
         {
-            if (IsWorkspaceVisibleInWindowTitle(windowTitle, candidate.WorkspacePath))
+            return null;
+        }
+
+        string? bestPath = null;
+        var bestScore = 0;
+        foreach (var workspacePath in workspacePaths)
+        {
+            if (string.IsNullOrWhiteSpace(workspacePath))
             {
-                return candidate.WorkspacePath;
+                continue;
+            }
+
+            var score = GetWorkspaceTitleMatchScore(windowTitle, workspacePath);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestPath = workspacePath;
             }
         }
 
-        return null;
+        return bestPath;
     }
 
     public static string? TryReadLastWorkspacePath(WindowSlot slot, AppConfig config)
@@ -171,20 +209,148 @@ public static class VscodeWorkspaceState
 
     public static bool IsWorkspaceVisibleInWindowTitle(string? windowTitle, string workspacePath)
     {
-        if (string.IsNullOrWhiteSpace(windowTitle))
+        return GetWorkspaceTitleMatchScore(windowTitle, workspacePath) > 0;
+    }
+
+    private static int GetWorkspaceTitleMatchScore(string? windowTitle, string workspacePath)
+    {
+        if (string.IsNullOrWhiteSpace(windowTitle) || string.IsNullOrWhiteSpace(workspacePath))
         {
-            return false;
+            return 0;
         }
 
+        var segments = GetWorkspaceTitleSegments(windowTitle);
+        if (segments.Count == 0)
+        {
+            return 0;
+        }
+
+        var best = 0;
         foreach (var candidate in GetWorkspaceTitleCandidates(workspacePath))
         {
-            if (windowTitle.Contains(candidate, StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrWhiteSpace(candidate))
             {
-                return true;
+                continue;
+            }
+
+            foreach (var segment in segments)
+            {
+                var score = ScoreTitleSegment(segment, candidate);
+                if (score > best)
+                {
+                    best = score;
+                }
             }
         }
 
+        return best;
+    }
+
+    private static IReadOnlyList<string> GetWorkspaceTitleSegments(string windowTitle)
+    {
+        var stripped = StripKnownAppTitleSuffix(windowTitle.Trim());
+        if (string.IsNullOrWhiteSpace(stripped))
+        {
+            return [];
+        }
+
+        return stripped
+            .Split(" - ", StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Select(NormalizeTitleSegment)
+            .Where(segment => segment.Length > 0)
+            .ToArray();
+    }
+
+    private static string StripKnownAppTitleSuffix(string title)
+    {
+        foreach (var suffix in AppTitleSuffixes)
+        {
+            if (title.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+            {
+                return title[..^suffix.Length].Trim();
+            }
+        }
+
+        return title;
+    }
+
+    private static string NormalizeTitleSegment(string segment)
+    {
+        var trimmed = segment.Trim();
+        if (trimmed.StartsWith('●'))
+        {
+            trimmed = trimmed.TrimStart('●').Trim();
+        }
+        else if (trimmed.StartsWith("* ", StringComparison.Ordinal))
+        {
+            trimmed = trimmed[2..].Trim();
+        }
+
+        return trimmed;
+    }
+
+    private static int ScoreTitleSegment(string segment, string candidate)
+    {
+        if (string.Equals(segment, candidate, StringComparison.OrdinalIgnoreCase))
+        {
+            return 300 + candidate.Length;
+        }
+
+        if (segment.StartsWith(candidate, StringComparison.OrdinalIgnoreCase)
+            && candidate.Length < segment.Length)
+        {
+            var rest = segment[candidate.Length..];
+            if (rest.StartsWith(" [", StringComparison.Ordinal) || rest.StartsWith(" (", StringComparison.Ordinal))
+            {
+                return 200 + candidate.Length;
+            }
+        }
+
+        if (segment.EndsWith("\\" + candidate, StringComparison.OrdinalIgnoreCase)
+            || segment.EndsWith("/" + candidate, StringComparison.OrdinalIgnoreCase))
+        {
+            return 150 + candidate.Length;
+        }
+
+        if (ContainsWholeToken(segment, candidate))
+        {
+            return 50 + candidate.Length;
+        }
+
+        return 0;
+    }
+
+    private static bool ContainsWholeToken(string text, string candidate)
+    {
+        var start = 0;
+        while (start <= text.Length - candidate.Length)
+        {
+            var index = text.IndexOf(candidate, start, StringComparison.OrdinalIgnoreCase);
+            if (index < 0)
+            {
+                return false;
+            }
+
+            var beforeOk = index == 0 || !IsWorkspaceTokenChar(text[index - 1]);
+            var afterIndex = index + candidate.Length;
+            var afterOk = afterIndex >= text.Length || !IsWorkspaceTokenChar(text[afterIndex]);
+            if (beforeOk && afterOk)
+            {
+                return true;
+            }
+
+            start = index + 1;
+        }
+
         return false;
+    }
+
+    private static bool IsWorkspaceTokenChar(char character)
+    {
+        return char.IsLetterOrDigit(character)
+            || character == '_'
+            || character == '-'
+            || character == '.';
     }
 
     private static IEnumerable<string> GetWorkspaceTitleCandidates(string workspacePath)
@@ -201,7 +367,16 @@ public static class VscodeWorkspaceState
             yield return fileName;
         }
 
-        if (Path.HasExtension(normalizedPath))
+        if (fileName.EndsWith(".code-workspace", StringComparison.OrdinalIgnoreCase))
+        {
+            var workspaceName = fileName[..^".code-workspace".Length];
+            if (!string.IsNullOrWhiteSpace(workspaceName)
+                && !string.Equals(workspaceName, fileName, StringComparison.OrdinalIgnoreCase))
+            {
+                yield return workspaceName;
+            }
+        }
+        else if (Path.HasExtension(normalizedPath))
         {
             var fileNameWithoutExtension = Path.GetFileNameWithoutExtension(normalizedPath);
             if (!string.IsNullOrWhiteSpace(fileNameWithoutExtension)

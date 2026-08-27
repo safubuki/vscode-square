@@ -42,6 +42,8 @@ await VerifyAsync(
     ManagedWindowCloseStatus.TimedOut,
     expectedCloseRequests: 1);
 
+VscodeWorkspaceStateTests.Run(failures);
+
 if (failures.Count > 0)
 {
     foreach (var failure in failures)
@@ -53,6 +55,7 @@ if (failures.Count > 0)
 }
 
 Console.WriteLine("Managed window close regression checks passed (5/5).");
+Console.WriteLine("VS Code workspace title matching regression checks passed (14/14).");
 return 0;
 
 async Task VerifyAsync(

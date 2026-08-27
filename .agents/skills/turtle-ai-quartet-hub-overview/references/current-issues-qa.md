@@ -1,6 +1,6 @@
 ﻿# 現在の既知課題と QA 方針
 
-更新日: 2026-08-25
+更新日: 2026-08-27
 
 ## 重点 QA
 - 既定状態で 4 つの VS Code を起動し、2x2 に配置できること。
@@ -27,6 +27,8 @@
 - VS Code / Antigravity の workspaceStorage 読み取りに失敗しても、保存済みワークスペースパスが消えないこと。
 - Antigravity でウィンドウ起動後にアプリ内から対象フォルダを開いた場合も、`%APPDATA%/Antigravity/User/workspaceStorage` とウィンドウタイトルから最新ワークスペースパスを保存できること。
 - 正しく開けたワークスペースは、タイトルと保存済みパスに反映されること。
+- VS Code で `zenn-contents` を開き、編集中ファイル名に `2025` などが含まれていても、保存済みパスとパネルタイトルは `2025` フォルダではなく実際のワークスペースになること。閉じて再起動しても同じフォルダが開くこと。
+- `dotnet run --project .\src\TurtleAIQuartetHub.Panel.Tests\TurtleAIQuartetHub.Panel.Tests.csproj` が、管理ウィンドウ終了確認に加えてワークスペースタイトル照合の回帰も通ること。
 - 各スロット右上のゴミ箱アイコンで visible slot の保存情報を削除でき、起動中の IDE / CLI ウィンドウも閉じること。
 - 個別閉じる・一括閉じるは `WM_CLOSE` の送信成功だけで未起動表示にせず、対象 HWND の消滅を確認できたスロットだけ管理解除すること。一括閉じるで失敗した対象は管理を継続すること。
 - 各スロット右上のゴミ箱アイコンは、削除確認ダイアログで `削除する` を押すまで削除しないこと。
@@ -101,7 +103,7 @@
 - XAML の共通 DataTemplate / Style を追加・移動した後は、`dotnet run --project .\src\TurtleAIQuartetHub.Panel\TurtleAIQuartetHub.Panel.csproj` またはビルド済み EXE の短時間起動で、`StaticResource` 解決失敗による起動直後終了がないこと。
 
 ## 残リスク
-- VS Code / Antigravity のウィンドウタイトルや workspaceStorage の変更により、ワークスペース表示がずれる可能性がある。
+- VS Code / Antigravity のウィンドウタイトルや workspaceStorage の変更により、ワークスペース表示がずれる可能性がある。標準の `ファイル名 - フォルダ名 - アプリ名` 形式ではファイル名中の数字や短い部分文字列で別フォルダへすり替わらない。カスタム `window.title` でワークスペース名がタイトルに出ない場合は、保存済みパスを維持する。
 - 既定の共有プロファイルでは `code.lock` によるスロット再接続が使えない。ウィンドウタイトルと保存済みワークスペースでの再接続に依存する。
 - VS Code の `code.lock` の PID と実ウィンドウ PID が将来の Electron 実装変更で一致しなくなると、既存ウィンドウ再接続の追加調整が必要になる可能性がある。
 - terminal ホストや CLI 実体が環境で異なる場合、`applications[].detection.processNames` の追加設定が必要になる可能性がある。
