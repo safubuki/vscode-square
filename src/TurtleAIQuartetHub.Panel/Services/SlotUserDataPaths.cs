@@ -1,24 +1,11 @@
 ﻿using System.Diagnostics;
 using System.IO;
-using System.Text.Json;
-using System.Text.Json.Nodes;
 using TurtleAIQuartetHub.Panel.Models;
 
 namespace TurtleAIQuartetHub.Panel.Services;
 
 public static class SlotUserDataPaths
 {
-    private static readonly JsonDocumentOptions SettingsParseOptions = new()
-    {
-        CommentHandling = JsonCommentHandling.Skip,
-        AllowTrailingCommas = true
-    };
-
-    private static readonly JsonSerializerOptions SettingsWriteOptions = new()
-    {
-        WriteIndented = true
-    };
-
     private static readonly string[] SharedUserFiles =
     [
         "settings.json",
@@ -133,18 +120,23 @@ public static class SlotUserDataPaths
             DiagnosticLog.Write(ex);
         }
 
-        // 各スロット専用プロファイルでは前回セッションのウィンドウ復元を必ず無効化する。
-        // これを行わないと VS Code が --new-window で開くウィンドウに加えて前回開いていた
-        // ウィンドウまで復元してしまい、余分なウィンドウが開いて 2x2 配置が崩れる。
-        // ※ SyncSharedState の後に適用することで、設定の再コピー後も上書きを維持する。
+        // 専用プロファイルでも User/settings.json は通常 VS Code と揃える。
+        // プロキシ等をパネルごとに書き換えなくてよいようにする。
+        // window.restoreWindows=none だけは専用プロファイル側に残し、余分な窓の復元を防ぐ。
+        // storage.json / Cache / WebStorage はここでは触らない。
         try
         {
-            EnsureLauncherManagedSettings(targetDirectory);
+            VscodeUserSettings.SynchronizeDedicatedSlotSettings(targetDirectory, config, codeCommand);
         }
         catch (Exception ex)
         {
             DiagnosticLog.Write(ex);
         }
+    }
+
+    public static string? GetInstalledUserDataDirectory(AppConfig config)
+    {
+        return GetInstalledUserDataDirectory(config.CodeCommand);
     }
 
     public static long ReclaimUnusedUserData(AppConfig config)
@@ -185,48 +177,6 @@ public static class SlotUserDataPaths
         return reclaimed;
     }
 
-    private static void EnsureLauncherManagedSettings(string targetDirectory)
-    {
-        var userDirectory = Path.Combine(targetDirectory, "User");
-        Directory.CreateDirectory(userDirectory);
-        var settingsPath = Path.Combine(userDirectory, "settings.json");
-
-        JsonObject root;
-        var settingsExist = File.Exists(settingsPath);
-        if (settingsExist)
-        {
-            var text = File.ReadAllText(settingsPath);
-            root = string.IsNullOrWhiteSpace(text)
-                ? new JsonObject()
-                : JsonNode.Parse(text, documentOptions: SettingsParseOptions) as JsonObject ?? new JsonObject();
-        }
-        else
-        {
-            root = new JsonObject();
-        }
-
-        var changed = SetStringSetting(root, "window.restoreWindows", "none");
-        if (!changed && settingsExist)
-        {
-            return;
-        }
-
-        File.WriteAllText(settingsPath, root.ToJsonString(SettingsWriteOptions));
-    }
-
-    private static bool SetStringSetting(JsonObject root, string key, string value)
-    {
-        if (root[key] is JsonValue existing
-            && existing.TryGetValue<string>(out var current)
-            && string.Equals(current, value, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        root[key] = value;
-        return true;
-    }
-
     private static void SyncSharedState(string sourceDirectory, string targetDirectory)
     {
         foreach (var fileName in SharedRootFiles)
@@ -262,7 +212,7 @@ public static class SlotUserDataPaths
         }
     }
 
-    private static string? GetInstalledUserDataDirectory(string codeCommand)
+    public static string? GetInstalledUserDataDirectory(string codeCommand)
     {
         var applicationData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         if (string.IsNullOrWhiteSpace(applicationData))

@@ -28,6 +28,9 @@ public sealed class StatusStore : INotifyPropertyChanged
     }
 
     private string _message;
+    private bool _vsCodeUseHttpProxy;
+    private string _vsCodeHttpProxy = string.Empty;
+    private string _vsCodeHttpNoProxy = string.Empty;
     private LauncherApplication? _selectedWorkspaceApplication;
     private StoredPanelPage? _selectedStoredPanelPage;
     private bool _suppressPersistence;
@@ -153,6 +156,36 @@ public sealed class StatusStore : INotifyPropertyChanged
         }
     }
 
+    public bool VsCodeUseHttpProxy
+    {
+        get => _vsCodeUseHttpProxy;
+        set
+        {
+            if (_vsCodeUseHttpProxy == value)
+            {
+                return;
+            }
+
+            _vsCodeUseHttpProxy = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(VsCodeProxyFieldsEnabled));
+        }
+    }
+
+    public bool VsCodeProxyFieldsEnabled => VsCodeUseHttpProxy;
+
+    public string VsCodeHttpProxy
+    {
+        get => _vsCodeHttpProxy;
+        set => SetNetworkField(ref _vsCodeHttpProxy, value ?? string.Empty);
+    }
+
+    public string VsCodeHttpNoProxy
+    {
+        get => _vsCodeHttpNoProxy;
+        set => SetNetworkField(ref _vsCodeHttpNoProxy, value ?? string.Empty);
+    }
+
     public LauncherApplication? FindApplication(string? applicationId)
     {
         var normalizedId = AppConfig.NormalizeApplicationId(applicationId, Config.DefaultWorkspaceApplicationId);
@@ -215,6 +248,59 @@ public sealed class StatusStore : INotifyPropertyChanged
         {
             ApplicationPathSettings.Add(new ApplicationPathSetting(application));
         }
+
+        ResetVsCodeNetworkSettings();
+    }
+
+    public void ResetVsCodeNetworkSettings()
+    {
+        if (Config.ManageVsCodeUserSettings)
+        {
+            VsCodeUseHttpProxy = Config.VsCodeUseHttpProxy;
+            VsCodeHttpProxy = Config.VsCodeHttpProxy;
+            VsCodeHttpNoProxy = Config.VsCodeHttpNoProxy;
+            return;
+        }
+
+        if (VscodeUserSettings.TryReadNetworkSettings(Config, out var current))
+        {
+            VsCodeUseHttpProxy = current.UseHttpProxy;
+            VsCodeHttpProxy = current.HttpProxy;
+            VsCodeHttpNoProxy = current.HttpNoProxy;
+            return;
+        }
+
+        VsCodeUseHttpProxy = false;
+        VsCodeHttpProxy = string.Empty;
+        VsCodeHttpNoProxy = string.Empty;
+    }
+
+    public string ApplyVsCodeNetworkSettings()
+    {
+        var settings = new VscodeUserSettings.NetworkSettings(
+            VsCodeUseHttpProxy,
+            VsCodeHttpProxy,
+            VsCodeHttpNoProxy);
+        var validationError = settings.Validate();
+        if (validationError is not null)
+        {
+            return validationError;
+        }
+
+        Config.ManageVsCodeUserSettings = true;
+        Config.VsCodeUseHttpProxy = settings.UseHttpProxy;
+        Config.VsCodeHttpProxy = settings.HttpProxy.Trim();
+        Config.VsCodeHttpNoProxy = settings.HttpNoProxy.Trim();
+        Config.SaveToUserConfig();
+
+        var result = VscodeUserSettings.ApplyNetworkSettings(Config, settings);
+        if (result.Errors.Count > 0)
+        {
+            return $"一部の settings.json へ書けませんでした: {string.Join(" / ", result.Errors)}";
+        }
+
+        var mode = settings.UseHttpProxy ? "プロキシ環境" : "オープンネットワーク";
+        return $"VS Code ユーザー設定を {result.ProfilesWritten} 件のプロファイルへ適用しました（{mode}）。既に開いている窓では、必要ならウィンドウの再読み込みを行ってください。";
     }
 
     public void SaveApplicationPathSettings()
@@ -1484,6 +1570,17 @@ public sealed class StatusStore : INotifyPropertyChanged
 
             SavePanelStates();
         }
+    }
+
+    private void SetNetworkField(ref string field, string value, [CallerMemberName] string? propertyName = null)
+    {
+        if (string.Equals(field, value, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        field = value;
+        OnPropertyChanged(propertyName);
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null)

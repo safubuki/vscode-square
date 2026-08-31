@@ -28,7 +28,7 @@ AI 実行状態の推定、VS Code UI Automation 走査、VS Code 拡張ログ�
 - スロット別 VS Code user-data-dir。
 - 最後に確認できたワークスペースパスまたは remote workspace URI。
 - 例外や遅い処理を記録するアプリ診断ログ。
-- 任意のユーザー設定ファイル `%LOCALAPPDATA%\TurtleAIQuartetHub\config\turtle-ai-quartet-hub.json`。
+- 任意のユーザー設定ファイル `%LOCALAPPDATA%\TurtleAIQuartetHub\config\turtle-ai-quartet-hub.json`（起動コマンドに加え、VS Code 共通のプロキシ URL を含む場合がある）。
 
 ## ネットワーク利用
 

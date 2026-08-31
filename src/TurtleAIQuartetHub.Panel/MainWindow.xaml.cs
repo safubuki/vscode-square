@@ -607,6 +607,23 @@ public partial class MainWindow : Window
         RefreshAuxiliaryUi();
     }
 
+    private void SelectOpenNetworkButton_Click(object sender, RoutedEventArgs e)
+    {
+        _statusStore.VsCodeUseHttpProxy = false;
+    }
+
+    private void SelectProxyNetworkButton_Click(object sender, RoutedEventArgs e)
+    {
+        _statusStore.VsCodeUseHttpProxy = true;
+    }
+
+    private void ApplyVsCodeNetworkSettingsButton_Click(object sender, RoutedEventArgs e)
+    {
+        _statusStore.Message = _statusStore.ApplyVsCodeNetworkSettings();
+        SettingsConfigPathText.Text = AppConfig.GetUserConfigPath();
+        RefreshAuxiliaryUi();
+    }
+
     private void ReloadApplicationDetectionButton_Click(object sender, RoutedEventArgs e)
     {
         _statusStore.ReloadApplicationsFromConfig();

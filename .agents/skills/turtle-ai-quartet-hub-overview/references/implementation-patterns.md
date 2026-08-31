@@ -1,6 +1,6 @@
 ﻿# Turtle AI Code Quartet Hub 実装パターン・注意点
 
-更新日: 2026-08-27
+更新日: 2026-08-31
 
 ## 1. AI 状態監視を戻さない
 - AI 状態検出、UI Automation のチャット走査、拡張ログ解析、VS Code 外枠オーバーレイは削除済み。
@@ -42,7 +42,7 @@
 - スロットの実行中アクションボタン文言は `閉じる` にする。未起動時は `起動` / `新規`。
 - タイトルバー右上は縮小表示、`?` ヘルプ、歯車設定、最小化、閉じるの順に置く。ヘルプは Codex / GitHub Copilot / Gemini / Claude Code / Grok Build の CLI 別カードで構成し、各カード内を `インストール` と `自律実行の起動オプション` に分ける。方式名とコマンドを別表示にしてコマンドだけを正確にコピーできるようにし、自律実行オプションは警告色と共通の注意書きで通常の導入手順から区別する。IDE / Windows アプリは公式サイト参照とし、Claude Code は公式インストーラの PowerShell / CMD コマンドと npm コマンドを書く。本文とコマンドは選択コピーできるよう `TextBox IsReadOnly=True` で表示し、実行操作は持たせない。
 - CLI の導入方法は公式の最新情報を確認して更新し、README と `?` ヘルプで同じ選択肢を示す。Grok Build CLI の Windows 向け手順は Git Bash を経由させず、`irm https://x.ai/cli/install.ps1 | iex` を表示する。Git Bash / WSL 向けには `curl -fsSL https://x.ai/cli/install.sh | bash` を残す。
-- 歯車設定画面では IDE / CLI / Windows アプリの起動コマンドを編集し、`%LOCALAPPDATA%/TurtleAIQuartetHub/config/turtle-ai-quartet-hub.json` へ保存する。VS Code の設定は `CodeCommand` と `applications[].command` を同期させる。
+- 歯車設定画面では IDE / CLI / Windows アプリの起動コマンドを編集し、`%LOCALAPPDATA%/TurtleAIQuartetHub/config/turtle-ai-quartet-hub.json` へ保存する。VS Code の設定は `CodeCommand` と `applications[].command` を同期させる。同じ画面の「VS Code 共通ユーザー設定」から、オープンネットワーク / プロキシ環境を全パネルの `User/settings.json` へ一度で適用できる。
 - 設定画面には表の Quartet と控え Quartet の保存状態を一覧表示する。表は `PanelTitle` / `Path` / `SavedWorkspacePath` / `SavedWorkspaceConfirmed` / `ApplicationId` を編集可能にし、控えは `PanelTitle` / `WorkspacePath` / `ApplicationId` を編集可能にする。空化ボタンと不整合修復ボタンを用意し、過去の重複控えや不完全な控えで再登録できない状態を解消できるようにする。
 - Codex / ChatGPT / Claude / Antigravity2 の Windows アプリ版は、補助ボタン行の左に `Windows` ラベルを置いて CLI と区別する。Antigravity2 の文言が収まる固定幅にそろえ、縮小表示でも行全体が隠れない幅を確保する。
 - 標準表示ではスロット領域をカード実寸の高さに詰め、控え Quartet までの黒い余白を作らない。下部の `Launch Quartet` ボタンも見切れないようにする。
@@ -147,3 +147,14 @@
 - **問題**: 共有プロファイルの `workspaceStorage` 候補を `windowTitle.Contains(フォルダ名)` で採用していた。`turtle-20250502-gem.md - zenn-contents - Visual Studio Code` のようなタイトルだと、ファイル名中の `2025` が別フォルダ `2025` に先にマッチし、開いている `zenn-contents` ではなく `2025` が `SavedWorkspacePath` へ保存された。再起動すると間違ったフォルダが開く。
 - **対策**: タイトルからアプリ名接尾辞を除き、` - ` 区切りの段と照合する。完全一致、SSH などの ` [..]` / ` (..)` 接尾辞、パス末尾を優先し、部分文字列ではマッチさせない。複数候補がある場合はより具体的なフォルダ名を選ぶ。`.code-workspace` は二重拡張子として名前から取り除く。
 - **注意**: `Contains` によるタイトル照合を戻さない。短いフォルダ名（`hub`, `Code`, `2025`）は長いワークスペース名やファイル名の一部に現れやすい。回帰テストは `dotnet run --project .\src\TurtleAIQuartetHub.Panel.Tests\TurtleAIQuartetHub.Panel.Tests.csproj` に含める。
+
+## 13. VS Code ユーザー設定の共有（2026-08-31 追加）
+- **ファイル**: `VscodeUserSettings.cs`, `SlotUserDataPaths.cs`, `AppConfig.cs`, `MainWindow.xaml`
+- **経緯**: 以前はスロット別 `--user-data-dir` が既定で、ウィンドウ識別（`code.lock`）と `window.restoreWindows=none`（余分な窓の復元防止）のためにプロファイルを分けていた。副作用として `User/settings.json` もパネルごとに分かれ、プロキシ切替を 4 回する必要があった。2026-08-21 にディスク消費対策で共有プロファイルが既定になったが、専用プロファイルを再有効化すると設定が再分裂する。
+- **今回の判断**: ユーザー向け設定（プロキシ、テーマ等の `settings.json`）は一つにまとめる。過去問題の再現を避けるため、次は分けたままにする。
+  - ウィンドウ別レイアウト（サイドバー幅）は `slots.json` の `PreferredLayout`。`storage.json` を稼働中に書かない。
+  - サインイン / チャット履歴は `globalStorage` と WebStorage をコピーしない、消さない。
+  - Cache / CachedExtensionVSIXs の 4 複製は戻さない。専用 user-data の既定も `false` のまま。
+  - `window.restoreWindows=none` は専用プロファイルにだけ書く。共有の `%APPDATA%/Code/User/settings.json` には書かない（通常 VS Code の窓復元を壊すため）。
+- **対策**: 歯車設定の「全パネルへ適用」は対象プロファイルの `http.proxy` / `http.proxySupport` / `http.noProxy` だけを更新する。オープンネットワークは `http.proxy=""` と `http.proxySupport=off`（環境変数のプロキシも使わない）。プロキシ環境は指定 URL と `override`。専用プロファイル起動時は通常 VS Code の `settings.json` を土台にし、その上で `restoreWindows=none` と（管理開始後のみ）ネットワーク設定を載せる。
+- **注意**: `storage.json` の一括上書き、Cache のコピー、共有プロファイルへの `restoreWindows=none` 強制は戻さない。既に開いている VS Code ではプロキシ反映にウィンドウ再読み込みが必要な場合がある。ワークスペースの `.vscode/settings.json` は触らない。

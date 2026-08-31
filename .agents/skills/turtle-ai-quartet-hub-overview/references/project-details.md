@@ -1,6 +1,6 @@
 ﻿# Turtle AI Code Quartet Hub プロジェクト詳細
 
-更新日: 2026-08-27
+更新日: 2026-08-31
 
 ## 概要
 - 4 つの開発用ウィンドウを A-D スロットとして管理する Windows 向け WPF アプリ。
@@ -37,6 +37,7 @@
 - `src/TurtleAIQuartetHub.Panel/Services/ApplicationDetectionService.cs`: PATH、App Paths、スタートメニュー、WindowsApps、一般的なインストール先からアプリを検出。
 - `src/TurtleAIQuartetHub.Panel/Services/ApplicationLauncher.cs`: VS Code 以外の workspace IDE / workspace CLI 起動、補助アプリ起動。
 - `src/TurtleAIQuartetHub.Panel/Services/VscodeLauncher.cs`: VS Code 起動、HWND 割り当て、専用 user-data 準備、取り逃がした既存スロットウィンドウの再接続。
+- `src/TurtleAIQuartetHub.Panel/Services/VscodeUserSettings.cs`: VS Code `User/settings.json` の共通適用。プロキシ等を全パネルへ一度で書き、専用プロファイルでも `window.restoreWindows` 以外は共有する。
 - `src/TurtleAIQuartetHub.Panel/Services/WindowEnumerator.cs`: アプリごとの管理対象ウィンドウ列挙。
 - `src/TurtleAIQuartetHub.Panel/Services/ManagedWindowCloseService.cs`: `WM_CLOSE` 送信後の HWND 消滅確認。未終了ウィンドウを誤って管理解除しない。
 - `src/TurtleAIQuartetHub.Panel/Services/WindowArranger.cs`: Win32 ベースの配置、配置ずれ確認、最大化、復元、前面/背面制御。
@@ -48,7 +49,7 @@
 - `%LOCALAPPDATA%/TurtleAIQuartetHub/slots.json`: visible slot と stored panel の保存状態。
 - `%LOCALAPPDATA%/TurtleAIQuartetHub/user-data/{A|B|C|D}/...`: `useDedicatedUserDataDirs=true` のときだけ使うスロット別 VS Code user-data-dir。既定は標準プロファイル共有のためこのフォルダは作らず、起動時に残存分を回収する。
 - `%LOCALAPPDATA%/TurtleAIQuartetHub/config/turtle-ai-quartet-hub.json`: 任意のユーザー設定。
-- タイトルバーの歯車設定から、IDE / CLI / Windows アプリの起動コマンドをこのユーザー設定へ保存できる。
+- タイトルバーの歯車設定から、IDE / CLI / Windows アプリの起動コマンドと、VS Code 共通のネットワーク設定（オープンネットワーク / プロキシ）をこのユーザー設定へ保存できる。
 
 ## 複数アプリ起動
 - `defaultWorkspaceApplicationId` がスロットの既定アプリ。未設定時は `vscode`。
@@ -62,10 +63,11 @@
 - Codex / ChatGPT / Claude / Antigravity2 Windows アプリは `Windows` ラベル付きの補助ボタンとして表示し、Antigravity2 は Claude の右側に置く。
 - 起動確認または periodic refresh でワークスペースを確認できたスロットは `SavedWorkspacePath` とタイトルを自動保存し、ワークスペース読み取りに失敗しても保存済みパスを消さない。
 - 歯車設定では、表の Quartet と控え Quartet のタイトル、パス、保存済みパス、アプリ ID を一覧で確認・編集・空化できる。不完全な控えや重複控えは修復ボタンで整理できる。
+- 歯車設定の「VS Code 共通ユーザー設定」は `User/settings.json` のプロキシ関連キーだけを全プロファイルへ適用する。サイドバー幅やサインイン状態は対象外。
 
 ## 確認コマンド
 - 通常ビルド: `dotnet build .\src\TurtleAIQuartetHub.Panel\TurtleAIQuartetHub.Panel.csproj`
-- 終了確認とワークスペースタイトル照合の回帰テスト: `dotnet run --project .\src\TurtleAIQuartetHub.Panel.Tests\TurtleAIQuartetHub.Panel.Tests.csproj`
+- 終了確認、ワークスペースタイトル照合、VS Code 共通ユーザー設定の回帰テスト: `dotnet run --project .\src\TurtleAIQuartetHub.Panel.Tests\TurtleAIQuartetHub.Panel.Tests.csproj`
 - 通常実行: `dotnet run --project .\src\TurtleAIQuartetHub.Panel\TurtleAIQuartetHub.Panel.csproj`
 - ビルド: `.\scripts\Build-Panel.ps1`
 - 開発実行: `.\scripts\Build-Panel.ps1 -Run`

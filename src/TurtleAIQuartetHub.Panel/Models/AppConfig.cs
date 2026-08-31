@@ -30,6 +30,16 @@ public sealed class AppConfig
 
     public bool InheritMainUserState { get; set; }
 
+    // 歯車設定から VS Code User/settings.json のネットワーク設定を一括適用したか。
+    // false の間は既存の settings.json を起動時に上書きしない。
+    public bool ManageVsCodeUserSettings { get; set; }
+
+    public bool VsCodeUseHttpProxy { get; set; }
+
+    public string VsCodeHttpProxy { get; set; } = string.Empty;
+
+    public string VsCodeHttpNoProxy { get; set; } = string.Empty;
+
     public bool ReopenLastWorkspace { get; set; } = true;
 
     public string StateDirectory { get; set; } = GetDefaultStateDirectory();
@@ -96,6 +106,8 @@ public sealed class AppConfig
         RemoteReconnectTimeoutSeconds = Math.Clamp(RemoteReconnectTimeoutSeconds, 1, Math.Min(LaunchTimeoutSeconds, 8));
         StatusRefreshIntervalMilliseconds = Math.Clamp(StatusRefreshIntervalMilliseconds, 250, 5000);
         DefaultWorkspaceApplicationId = NormalizeApplicationId(DefaultWorkspaceApplicationId, VsCodeApplicationId);
+        VsCodeHttpProxy = VsCodeHttpProxy?.Trim() ?? string.Empty;
+        VsCodeHttpNoProxy = VsCodeHttpNoProxy?.Trim() ?? string.Empty;
         Applications = NormalizeApplications(Applications, CodeCommand);
 
         var configuredSlots = Slots ?? DefaultSlots();

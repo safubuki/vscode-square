@@ -192,6 +192,37 @@
       </Setter>
     </Style>
 
+    <Style x:Key="SettingsPresetButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButton}">
+      <Setter Property="MinHeight" Value="28" />
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="Padding" Value="10,4" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="Background" Value="#17201B" />
+      <Setter Property="BorderBrush" Value="#344A3E" />
+    </Style>
+
+    <Style x:Key="SettingsOpenNetworkButtonStyle" TargetType="Button" BasedOn="{StaticResource SettingsPresetButtonStyle}">
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding VsCodeUseHttpProxy}" Value="False">
+          <Setter Property="Foreground" Value="#E9FFF2" />
+          <Setter Property="Background" Value="#263F31" />
+          <Setter Property="BorderBrush" Value="#59D58E" />
+          <Setter Property="FontWeight" Value="SemiBold" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
+    <Style x:Key="SettingsProxyNetworkButtonStyle" TargetType="Button" BasedOn="{StaticResource SettingsPresetButtonStyle}">
+      <Style.Triggers>
+        <DataTrigger Binding="{Binding VsCodeUseHttpProxy}" Value="True">
+          <Setter Property="Foreground" Value="#E9FFF2" />
+          <Setter Property="Background" Value="#263F31" />
+          <Setter Property="BorderBrush" Value="#59D58E" />
+          <Setter Property="FontWeight" Value="SemiBold" />
+        </DataTrigger>
+      </Style.Triggers>
+    </Style>
+
     <Style x:Key="LaunchButtonStyle" TargetType="Button" BasedOn="{StaticResource BaseButton}">
       <Setter Property="Foreground" Value="#06120C" />
       <Setter Property="Background" Value="{StaticResource AccentBrush}" />
@@ -2297,7 +2328,7 @@
             Panel.ZIndex="22">
       <Grid>
         <Border MaxWidth="610"
-                MaxHeight="500"
+                MaxHeight="560"
                 Margin="14"
                 Padding="16"
                 Background="{StaticResource SurfaceBrush}"
@@ -2341,6 +2372,57 @@
                           VerticalScrollBarVisibility="Auto">
               <StackPanel>
                 <Border Padding="10"
+                        Background="#111815"
+                        BorderBrush="{StaticResource BorderBrushSoft}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                  <StackPanel>
+                    <TextBlock Text="VS Code 共通ユーザー設定"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource TextBrush}" />
+                    <TextBlock Margin="0,4,0,8"
+                               Text="プロキシなどの User/settings.json は全パネルで共有します。サイドバー幅はパネル別に残し、サインインやチャット状態、Cache は書き換えません。"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               TextWrapping="Wrap" />
+                    <UniformGrid Columns="2" Margin="0,0,0,8">
+                      <Button Content="オープンネットワーク"
+                              Margin="0,0,4,0"
+                              Click="SelectOpenNetworkButton_Click"
+                              Style="{StaticResource SettingsOpenNetworkButtonStyle}"
+                              ToolTip="http.proxy を空にし、環境変数のプロキシも使わない" />
+                      <Button Content="プロキシ環境"
+                              Margin="4,0,0,0"
+                              Click="SelectProxyNetworkButton_Click"
+                              Style="{StaticResource SettingsProxyNetworkButtonStyle}"
+                              ToolTip="入力したプロキシ URL を全パネルの User/settings.json へ書く" />
+                    </UniformGrid>
+                    <TextBlock Text="プロキシ URL"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="10" />
+                    <TextBox Margin="0,4,0,8"
+                             Text="{Binding VsCodeHttpProxy, UpdateSourceTrigger=PropertyChanged}"
+                             IsEnabled="{Binding VsCodeProxyFieldsEnabled}"
+                             Style="{StaticResource SettingsTextBoxStyle}"
+                             ToolTip="例: http://proxy.example.local:8080" />
+                    <TextBlock Text="例外 (noProxy)"
+                               Foreground="{StaticResource MutedTextBrush}"
+                               FontSize="10" />
+                    <TextBox Margin="0,4,0,8"
+                             Text="{Binding VsCodeHttpNoProxy, UpdateSourceTrigger=PropertyChanged}"
+                             IsEnabled="{Binding VsCodeProxyFieldsEnabled}"
+                             Style="{StaticResource SettingsTextBoxStyle}"
+                             ToolTip="カンマ区切り。例: localhost,127.0.0.1" />
+                    <Button Content="全パネルへ適用"
+                            HorizontalAlignment="Left"
+                            MinWidth="122"
+                            Click="ApplyVsCodeNetworkSettingsButton_Click"
+                            Style="{StaticResource BaseButton}"
+                            ToolTip="開いている VS Code すべての User/settings.json へ一度で書き込みます" />
+                  </StackPanel>
+                </Border>
+
+                <Border Margin="0,12,0,0"
+                        Padding="10"
                         Background="#111815"
                         BorderBrush="{StaticResource BorderBrushSoft}"
                         BorderThickness="1"
