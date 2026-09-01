@@ -1,3 +1,5 @@
+using System.Text.Json;
+using TurtleAIQuartetHub.Panel.Models;
 using TurtleAIQuartetHub.Panel.Services;
 
 internal static class VscodeWorkspaceStateTests
@@ -9,6 +11,10 @@ internal static class VscodeWorkspaceStateTests
         const string hub = @"C:\git_home\turtle-ai-code-quartet-hub";
         const string shortHub = @"C:\git_home\hub";
         const string workspaceFile = @"C:\git_home\notes\2025.code-workspace";
+        const string oldSshWorkspace = "vscode-remote://ssh-remote+old-host/home/developer/project";
+        const string currentSshWorkspace = "vscode-remote://ssh-remote+current-host/home/developer/project";
+        const string parentWorkspace = @"C:\work\project";
+        const string childWorkspace = @"C:\work\project\src";
 
         Verify(
             failures,
@@ -44,6 +50,62 @@ internal static class VscodeWorkspaceStateTests
             () => VscodeWorkspaceState.IsWorkspaceVisibleInWindowTitle(
                 "file.md - zenn-contents [SSH: host] - Visual Studio Code",
                 zennContents));
+
+        Verify(
+            failures,
+            "SSH 接続名が異なる古いリモート URI は現在のウィンドウと判定しない",
+            () => !VscodeWorkspaceState.IsWorkspaceVisibleInWindowTitle(
+                "file.md - project [SSH: current-host] - Visual Studio Code",
+                oldSshWorkspace));
+
+        Verify(
+            failures,
+            "SSH 接続名が一致する現在のリモート URI を判定する",
+            () => VscodeWorkspaceState.IsWorkspaceVisibleInWindowTitle(
+                "file.md - project [SSH: current-host] - Visual Studio Code",
+                currentSshWorkspace));
+
+        Verify(
+            failures,
+            "同じフォルダ名の SSH 候補では古い候補順より現在の接続名を優先する",
+            () => string.Equals(
+                VscodeWorkspaceState.TryPickWorkspacePathVisibleInWindowTitle(
+                    "file.md - project [SSH: current-host] - Visual Studio Code",
+                    [oldSshWorkspace, currentSshWorkspace]),
+                currentSshWorkspace,
+                StringComparison.OrdinalIgnoreCase));
+
+        Verify(
+            failures,
+            "SSH 接続名を表示しないカスタムタイトルではフォルダ名照合を維持する",
+            () => VscodeWorkspaceState.IsWorkspaceVisibleInWindowTitle(
+                "file.md - project - Visual Studio Code",
+                currentSshWorkspace));
+
+        Verify(
+            failures,
+            "親フォルダを開いた場合は子フォルダ候補ではなく親を選ぶ",
+            () => string.Equals(
+                VscodeWorkspaceState.TryPickWorkspacePathVisibleInWindowTitle(
+                    "Program.cs - project - Visual Studio Code",
+                    [childWorkspace, parentWorkspace]),
+                parentWorkspace,
+                StringComparison.OrdinalIgnoreCase));
+
+        Verify(
+            failures,
+            "一階層深い子フォルダを開いた場合は実際の子フォルダを選ぶ",
+            () => string.Equals(
+                VscodeWorkspaceState.TryPickWorkspacePathVisibleInWindowTitle(
+                    "Program.cs - src - Visual Studio Code",
+                    [parentWorkspace, childWorkspace]),
+                childWorkspace,
+                StringComparison.OrdinalIgnoreCase));
+
+        Verify(
+            failures,
+            "同名ローカルフォルダは workspace.json の作成順ではなく最新利用状態で選ぶ",
+            VerifyLatestWorkspaceActivityWinsEvenWithCachedCandidates);
 
         Verify(
             failures,
@@ -128,5 +190,90 @@ internal static class VscodeWorkspaceStateTests
         {
             failures.Add($"{name}: {ex.Message}");
         }
+    }
+
+    private static bool VerifyLatestWorkspaceActivityWinsEvenWithCachedCandidates()
+    {
+        var testRoot = Path.Combine(
+            Path.GetTempPath(),
+            "TurtleAIQuartetHub.Tests",
+            Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var config = new AppConfig
+            {
+                StateDirectory = testRoot,
+                UseDedicatedUserDataDirs = true
+            };
+            var storageRoot = Path.Combine(testRoot, "user-data", "A", "User", "workspaceStorage");
+            var firstPath = Path.Combine(testRoot, "first", "project");
+            var secondPath = Path.Combine(testRoot, "second", "project");
+            var now = DateTime.UtcNow;
+
+            var firstDatabase = CreateWorkspaceCandidate(
+                storageRoot,
+                "first-candidate",
+                firstPath,
+                workspaceJsonTimeUtc: now.AddDays(-30),
+                stateDatabaseTimeUtc: now.AddMinutes(-1));
+            var secondDatabase = CreateWorkspaceCandidate(
+                storageRoot,
+                "second-candidate",
+                secondPath,
+                workspaceJsonTimeUtc: now.AddDays(-1),
+                stateDatabaseTimeUtc: now.AddHours(-1));
+
+            var firstSelection = VscodeWorkspaceState.TryReadCurrentWorkspacePath(
+                AppConfig.VsCodeApplicationId,
+                "A",
+                "Program.cs - project - Visual Studio Code",
+                config);
+            if (!string.Equals(firstSelection, firstPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            // workspaceStorage 直下や workspace.json を変更せず利用状態だけを反転する。
+            // スキャンキャッシュ中でも state.vscdb の最新時刻を再確認できることを検証する。
+            File.SetLastWriteTimeUtc(firstDatabase, now.AddHours(-2));
+            File.SetLastWriteTimeUtc(secondDatabase, now);
+
+            var secondSelection = VscodeWorkspaceState.TryReadCurrentWorkspacePath(
+                AppConfig.VsCodeApplicationId,
+                "A",
+                "Program.cs - project - Visual Studio Code",
+                config);
+            return string.Equals(secondSelection, secondPath, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(testRoot))
+            {
+                Directory.Delete(testRoot, recursive: true);
+            }
+        }
+    }
+
+    private static string CreateWorkspaceCandidate(
+        string storageRoot,
+        string candidateId,
+        string workspacePath,
+        DateTime workspaceJsonTimeUtc,
+        DateTime stateDatabaseTimeUtc)
+    {
+        var candidateDirectory = Path.Combine(storageRoot, candidateId);
+        Directory.CreateDirectory(candidateDirectory);
+
+        var workspaceJsonPath = Path.Combine(candidateDirectory, "workspace.json");
+        File.WriteAllText(
+            workspaceJsonPath,
+            JsonSerializer.Serialize(new { folder = new Uri(workspacePath).AbsoluteUri }));
+        File.SetLastWriteTimeUtc(workspaceJsonPath, workspaceJsonTimeUtc);
+
+        var stateDatabasePath = Path.Combine(candidateDirectory, "state.vscdb");
+        File.WriteAllText(stateDatabasePath, string.Empty);
+        File.SetLastWriteTimeUtc(stateDatabasePath, stateDatabaseTimeUtc);
+        return stateDatabasePath;
     }
 }

@@ -56,7 +56,7 @@ if (failures.Count > 0)
 }
 
 Console.WriteLine("Managed window close regression checks passed (5/5).");
-Console.WriteLine("VS Code workspace title matching regression checks passed (14/14).");
+Console.WriteLine("VS Code workspace title matching regression checks passed (21/21).");
 Console.WriteLine("VS Code shared user settings regression checks passed (5/5).");
 return 0;
 

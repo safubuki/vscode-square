@@ -84,3 +84,9 @@
 - フォーカスイン時の透け対策: 他スロットの背面送り（`SendOtherSlotsToBackOnSameDisplay`）は最大化アニメ完了後（`FocusSwitchArrangeDelay` 経過後）に行う。アニメ開始と同時に HWND_BOTTOM へ送ると、最大化が画面を覆い切るまでタイルの位置に管理外ウィンドウ（ブラウザ等）が透けて見える。
 - 不可視枠（DWM 拡張フレームと GetWindowRect の差）は「通常状態」のときにだけ計測し、ハンドルごとにキャッシュする（`GetFrameInsetCached`）。最大化中は枠のはみ出し方が異なり、最小化中は座標が無効なため、そのまま測ると 4 面セルより大きい/ずれた配置になる。復元前の事前補正（rcNormalPosition）はキャッシュ値、最終配置（SetWindowPos）は復元後の実測で行う。
 - パネル UI の描画は GPU 既定（`RenderMode.SoftwareOnly` 強制は撤去）。特定環境で描画乱れが出る場合のみ SoftwareOnly へ戻す。
+
+## 10. SSH 接続名を含むワークスペース照合（2026-09-01 追加）
+- **ファイル**: `VscodeWorkspaceState.cs`, `TurtleAIQuartetHub.Panel.Tests/VscodeWorkspaceStateTests.cs`
+- **問題**: 異なる SSH 接続先で同名フォルダを開くと、フォルダ名の一致スコアが同点になり、`workspaceStorage` で先に並んだ古い `vscode-remote://ssh-remote+...` URI を現在値として保存することがあった。次回起動でも古い SSH 接続名を再利用するため、廃止済み接続先では接続に失敗する。
+- **対策**: VS Code タイトルに `[SSH: 接続名]` が見える場合は、URI authority の `ssh-remote+接続名` と一致しない候補を除外し、一致する候補へ最優先スコアを与える。選択された現在 URI は既存の `StatusStore` 経路で `Path` / `SavedWorkspacePath` / `slots.json` へ保存する。
+- **注意**: フォルダ名・ファイル名の誤判定防止を維持し、単純な `Contains` へ戻さない。カスタム `window.title` で `[SSH: ...]` が出ない場合はフォルダ名照合へフォールバックし、候補を根拠なく破棄しない。Remote-SSH の履歴や認証情報、`workspaceStorage` 自体は削除しない。

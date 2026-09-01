@@ -7,6 +7,8 @@ namespace TurtleAIQuartetHub.Panel.Services;
 public static class VscodeWorkspaceState
 {
     private const string AntigravityApplicationId = "antigravity";
+    private const string SshRemoteAuthorityPrefix = "ssh-remote+";
+    private const int RemoteAuthorityMatchBonus = 1000;
 
     // workspaceStorage のスキャン結果キャッシュ。共有プロファイルでは配下が数百フォルダに
     // なり得るのに、状態リフレッシュのたび（既定 1 秒周期×4 スロット）に全列挙＋全 JSON
@@ -45,8 +47,7 @@ public static class VscodeWorkspaceState
     {
         return TryPickWorkspacePathVisibleInWindowTitle(
             windowTitle,
-            TryReadWorkspacePathCandidates(applicationId, slotName, config)
-                .Select(candidate => candidate.WorkspacePath));
+            TryReadWorkspacePathCandidates(applicationId, slotName, config));
     }
 
     /// <summary>
@@ -95,7 +96,9 @@ public static class VscodeWorkspaceState
 
     public static string? TryReadLastWorkspacePath(string? applicationId, string slotName, AppConfig config)
     {
-        var candidate = TryReadWorkspacePathCandidates(applicationId, slotName, config).FirstOrDefault();
+        var candidate = TryReadWorkspacePathCandidates(applicationId, slotName, config)
+            .OrderByDescending(GetLatestWorkspaceActivityTimeUtc)
+            .FirstOrDefault();
         return string.IsNullOrWhiteSpace(candidate.WorkspacePath)
             ? null
             : candidate.WorkspacePath;
@@ -116,7 +119,7 @@ public static class VscodeWorkspaceState
         }
 
         return candidates
-            .OrderByDescending(candidate => candidate.LastWriteTimeUtc)
+            .OrderByDescending(candidate => candidate.LastActivityTimeUtc)
             .ToList();
     }
 
@@ -153,7 +156,11 @@ public static class VscodeWorkspaceState
                 var workspacePath = TryReadWorkspaceJson(workspaceJsonPath);
                 if (!string.IsNullOrWhiteSpace(workspacePath))
                 {
-                    candidates.Add(new WorkspacePathCandidate(workspacePath, File.GetLastWriteTimeUtc(workspaceJsonPath)));
+                    candidates.Add(new WorkspacePathCandidate(
+                        workspacePath,
+                        directory,
+                        workspaceJsonPath,
+                        GetWorkspaceActivityTimeUtc(directory, workspaceJsonPath)));
                 }
             }
         }
@@ -164,6 +171,100 @@ public static class VscodeWorkspaceState
 
         ScanCache[workspaceStorageDirectory] = new CachedScan(now, rootWriteTimeUtc, candidates);
         return candidates;
+    }
+
+    private static string? TryPickWorkspacePathVisibleInWindowTitle(
+        string? windowTitle,
+        IReadOnlyList<WorkspacePathCandidate> workspaceCandidates)
+    {
+        if (string.IsNullOrWhiteSpace(windowTitle))
+        {
+            return null;
+        }
+
+        var bestScore = 0;
+        var bestCandidates = new List<WorkspacePathCandidate>();
+        foreach (var candidate in workspaceCandidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate.WorkspacePath))
+            {
+                continue;
+            }
+
+            var score = GetWorkspaceTitleMatchScore(windowTitle, candidate.WorkspacePath);
+            if (score <= 0 || score < bestScore)
+            {
+                continue;
+            }
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestCandidates.Clear();
+            }
+
+            bestCandidates.Add(candidate);
+        }
+
+        if (bestCandidates.Count == 0)
+        {
+            return null;
+        }
+
+        if (bestCandidates.Count == 1)
+        {
+            return bestCandidates[0].WorkspacePath;
+        }
+
+        // 別の場所に同名フォルダがある場合、タイトルだけでは区別できない。
+        // workspace.json は作成後ほぼ更新されないため、実際の利用状態が更新される
+        // state.vscdb を同点候補だけ再確認し、直近に使われたワークスペースを選ぶ。
+        // 全候補の DB を毎 tick 読まず、通常ケースの軽量な更新を維持する。
+        return bestCandidates
+            .OrderByDescending(GetLatestWorkspaceActivityTimeUtc)
+            .First()
+            .WorkspacePath;
+    }
+
+    private static DateTime GetLatestWorkspaceActivityTimeUtc(WorkspacePathCandidate candidate)
+    {
+        return GetWorkspaceActivityTimeUtc(
+            candidate.StorageDirectory,
+            candidate.WorkspaceJsonPath,
+            candidate.LastActivityTimeUtc);
+    }
+
+    private static DateTime GetWorkspaceActivityTimeUtc(
+        string storageDirectory,
+        string workspaceJsonPath,
+        DateTime fallback = default)
+    {
+        var latest = fallback;
+        foreach (var path in new[]
+                 {
+                     workspaceJsonPath,
+                     Path.Combine(storageDirectory, "state.vscdb"),
+                     Path.Combine(storageDirectory, "state.vscdb.backup")
+                 })
+        {
+            try
+            {
+                if (File.Exists(path))
+                {
+                    var lastWriteTimeUtc = File.GetLastWriteTimeUtc(path);
+                    if (lastWriteTimeUtc > latest)
+                    {
+                        latest = lastWriteTimeUtc;
+                    }
+                }
+            }
+            catch
+            {
+                // VS Code が更新中で一時的に参照できない場合は、直前のキャッシュ時刻を使う。
+            }
+        }
+
+        return latest;
     }
 
     private static IEnumerable<string> GetWorkspaceStorageDirectories(string? applicationId, string slotName, AppConfig config)
@@ -240,6 +341,30 @@ public static class VscodeWorkspaceState
                 {
                     best = score;
                 }
+            }
+        }
+
+        if (TryCreateNonFileUri(workspacePath, out var remoteUri))
+        {
+            var authority = GetReadableRemoteAuthority(remoteUri.Authority);
+            var authorityScore = string.IsNullOrWhiteSpace(authority)
+                ? 0
+                : segments.Max(segment => ScoreTitleSegment(segment, authority));
+
+            // 同じフォルダ名を複数の SSH 接続先で開いた場合、フォルダ名だけでは
+            // workspaceStorage の古い URI と区別できない。VS Code がタイトルへ
+            // [SSH: 接続名] を出しているときは、その接続名が一致しない候補を捨てる。
+            if (remoteUri.Authority.StartsWith(SshRemoteAuthorityPrefix, StringComparison.OrdinalIgnoreCase)
+                && windowTitle.Contains("[SSH:", StringComparison.OrdinalIgnoreCase)
+                && authorityScore == 0)
+            {
+                return 0;
+            }
+
+            // フォルダ名が同じ候補同士では、現在タイトルに見えている接続先を必ず優先する。
+            if (authorityScore > 0)
+            {
+                best += RemoteAuthorityMatchBonus + authorityScore;
             }
         }
 
@@ -571,5 +696,9 @@ public static class VscodeWorkspaceState
 
     private readonly record struct NonFileUriInfo(string Scheme, string Authority, string AbsolutePath, string AbsoluteUri);
 
-    private readonly record struct WorkspacePathCandidate(string WorkspacePath, DateTime LastWriteTimeUtc);
+    private readonly record struct WorkspacePathCandidate(
+        string WorkspacePath,
+        string StorageDirectory,
+        string WorkspaceJsonPath,
+        DateTime LastActivityTimeUtc);
 }

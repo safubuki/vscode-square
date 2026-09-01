@@ -102,6 +102,7 @@
 - タスクバー Jump List のスロット切替と表示モード切替が動くこと。
 - `scripts/Build-Panel.ps1` と `scripts/Test-StoreReadiness.ps1` が通ること。
 - XAML の共通 DataTemplate / Style を追加・移動した後は、`dotnet run --project .\src\TurtleAIQuartetHub.Panel\TurtleAIQuartetHub.Panel.csproj` またはビルド済み EXE の短時間起動で、`StaticResource` 解決失敗による起動直後終了がないこと。
+- 同じリモートフォルダを異なる SSH 接続名で開いた場合、ウィンドウタイトルの `[SSH: 現在の接続名]` と一致する `vscode-remote://ssh-remote+...` URI が `slots.json` の最新接続先として保存されること。アプリを終了・再起動しても、古い SSH 接続名ではなく直前に使用した接続先を開くこと。
 
 ## 残リスク
 - VS Code / Antigravity のウィンドウタイトルや workspaceStorage の変更により、ワークスペース表示がずれる可能性がある。標準の `ファイル名 - フォルダ名 - アプリ名` 形式ではファイル名中の数字や短い部分文字列で別フォルダへすり替わらない。カスタム `window.title` でワークスペース名がタイトルに出ない場合は、保存済みパスを維持する。

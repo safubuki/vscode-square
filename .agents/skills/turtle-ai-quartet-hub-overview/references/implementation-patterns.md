@@ -158,3 +158,9 @@
   - `window.restoreWindows=none` は専用プロファイルにだけ書く。共有の `%APPDATA%/Code/User/settings.json` には書かない（通常 VS Code の窓復元を壊すため）。
 - **対策**: 歯車設定の「全パネルへ適用」は対象プロファイルの `http.proxy` / `http.proxySupport` / `http.noProxy` だけを更新する。オープンネットワークは `http.proxy=""` と `http.proxySupport=off`（環境変数のプロキシも使わない）。プロキシ環境は指定 URL と `override`。専用プロファイル起動時は通常 VS Code の `settings.json` を土台にし、その上で `restoreWindows=none` と（管理開始後のみ）ネットワーク設定を載せる。
 - **注意**: `storage.json` の一括上書き、Cache のコピー、共有プロファイルへの `restoreWindows=none` 強制は戻さない。既に開いている VS Code ではプロキシ反映にウィンドウ再読み込みが必要な場合がある。ワークスペースの `.vscode/settings.json` は触らない。
+
+## 14. SSH 接続名を含むワークスペース照合（2026-09-01 追加）
+- **ファイル**: `VscodeWorkspaceState.cs`, `TurtleAIQuartetHub.Panel.Tests/VscodeWorkspaceStateTests.cs`
+- **問題**: 異なる SSH 接続先で同名フォルダを開くと、フォルダ名の一致スコアが同点になり、`workspaceStorage` で先に並んだ古い `vscode-remote://ssh-remote+...` URI を現在値として保存することがあった。次回起動でも古い SSH 接続名を再利用するため、廃止済み接続先では接続に失敗する。
+- **対策**: VS Code タイトルに `[SSH: 接続名]` が見える場合は、URI authority の `ssh-remote+接続名` と一致しない候補を除外し、一致する候補へ最優先スコアを与える。選択された現在 URI は既存の `StatusStore` 経路で `Path` / `SavedWorkspacePath` / `slots.json` へ保存する。
+- **注意**: 2026-08-27 のフォルダ名・ファイル名誤判定防止を維持し、単純な `Contains` へ戻さない。カスタム `window.title` で `[SSH: ...]` が出ない場合はフォルダ名照合へフォールバックし、候補を根拠なく破棄しない。Remote-SSH の履歴や認証情報、`workspaceStorage` 自体は削除しない。
