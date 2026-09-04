@@ -30,8 +30,9 @@ public sealed class AppConfig
 
     public bool InheritMainUserState { get; set; }
 
-    // 歯車設定から VS Code User/settings.json のネットワーク設定を一括適用したか。
-    // false の間は既存の settings.json を起動時に上書きしない。
+    // 歯車設定からネットワーク設定をハブ側で管理するか。
+    // false の間は専用プロファイルの既存 settings.json を起動時に上書きしない。
+    // true でも標準の %APPDATA%/Code/User/settings.json は書き換えない。
     public bool ManageVsCodeUserSettings { get; set; }
 
     public bool VsCodeUseHttpProxy { get; set; }

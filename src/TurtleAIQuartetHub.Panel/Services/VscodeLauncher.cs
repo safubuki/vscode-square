@@ -606,6 +606,7 @@ public sealed class VscodeLauncher
         };
 
         AddLaunchArguments(startInfo.ArgumentList, slot, config, launchPath);
+        VscodeUserSettings.ApplyManagedProxyEnvironment(startInfo, config);
         return startInfo;
     }
 
@@ -620,7 +621,7 @@ public sealed class VscodeLauncher
             ? QuoteForCommandShell(codeCommand)
             : $"{QuoteForCommandShell(codeCommand)} {wrapperArguments}";
 
-        return new ProcessStartInfo
+        var startInfo = new ProcessStartInfo
         {
             FileName = Environment.GetEnvironmentVariable("ComSpec") ?? "cmd.exe",
             Arguments = $"/d /s /c \"{wrappedCommand}\"",
@@ -628,6 +629,8 @@ public sealed class VscodeLauncher
             CreateNoWindow = true,
             WindowStyle = ProcessWindowStyle.Hidden
         };
+        VscodeUserSettings.ApplyManagedProxyEnvironment(startInfo, config);
+        return startInfo;
     }
 
     private void KillZombieProcess(WindowSlot slot, AppConfig config)

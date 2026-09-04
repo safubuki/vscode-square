@@ -1,6 +1,6 @@
 ﻿# Turtle AI Code Quartet Hub プロジェクト詳細
 
-更新日: 2026-08-31
+更新日: 2026-09-03
 
 ## 概要
 - 4 つの開発用ウィンドウを A-D スロットとして管理する Windows 向け WPF アプリ。
@@ -37,7 +37,7 @@
 - `src/TurtleAIQuartetHub.Panel/Services/ApplicationDetectionService.cs`: PATH、App Paths、スタートメニュー、WindowsApps、一般的なインストール先からアプリを検出。
 - `src/TurtleAIQuartetHub.Panel/Services/ApplicationLauncher.cs`: VS Code 以外の workspace IDE / workspace CLI 起動、補助アプリ起動。
 - `src/TurtleAIQuartetHub.Panel/Services/VscodeLauncher.cs`: VS Code 起動、HWND 割り当て、専用 user-data 準備、取り逃がした既存スロットウィンドウの再接続。
-- `src/TurtleAIQuartetHub.Panel/Services/VscodeUserSettings.cs`: VS Code `User/settings.json` の共通適用。プロキシ等を全パネルへ一度で書き、専用プロファイルでも `window.restoreWindows` 以外は共有する。
+- `src/TurtleAIQuartetHub.Panel/Services/VscodeUserSettings.cs`: ハブ管理の VS Code ネットワーク設定。`User/settings.json` は通常起動の `%APPDATA%/Code/User/settings.json`（Roaming）と同じ実体にする。ハブは Roaming の内容を書き換えない。`storage.json` / Cache / サインイン状態は共有しない。
 - `src/TurtleAIQuartetHub.Panel/Services/WindowEnumerator.cs`: アプリごとの管理対象ウィンドウ列挙。
 - `src/TurtleAIQuartetHub.Panel/Services/ManagedWindowCloseService.cs`: `WM_CLOSE` 送信後の HWND 消滅確認。未終了ウィンドウを誤って管理解除しない。
 - `src/TurtleAIQuartetHub.Panel/Services/WindowArranger.cs`: Win32 ベースの配置、配置ずれ確認、最大化、復元、前面/背面制御。
@@ -63,7 +63,7 @@
 - Codex / ChatGPT / Claude / Antigravity2 Windows アプリは `Windows` ラベル付きの補助ボタンとして表示し、Antigravity2 は Claude の右側に置く。
 - 起動確認または periodic refresh でワークスペースを確認できたスロットは `SavedWorkspacePath` とタイトルを自動保存し、ワークスペース読み取りに失敗しても保存済みパスを消さない。
 - 歯車設定では、表の Quartet と控え Quartet のタイトル、パス、保存済みパス、アプリ ID を一覧で確認・編集・空化できる。不完全な控えや重複控えは修復ボタンで整理できる。
-- 歯車設定の「VS Code 共通ユーザー設定」は `User/settings.json` のプロキシ関連キーだけを全プロファイルへ適用する。サイドバー幅やサインイン状態は対象外。
+- 歯車設定の「VS Code 共通ユーザー設定」はプロキシをハブ設定へ保存する。`User/settings.json`（プロキシ・テーマ・SSH プロキシ）は通常起動とハブ起動で同じ Roaming ファイルを使う。サイドバー幅、サインイン、チャット履歴、Cache は対象外。
 
 ## 確認コマンド
 - 通常ビルド: `dotnet build .\src\TurtleAIQuartetHub.Panel\TurtleAIQuartetHub.Panel.csproj`

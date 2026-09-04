@@ -296,11 +296,16 @@ public sealed class StatusStore : INotifyPropertyChanged
         var result = VscodeUserSettings.ApplyNetworkSettings(Config, settings);
         if (result.Errors.Count > 0)
         {
-            return $"一部の settings.json へ書けませんでした: {string.Join(" / ", result.Errors)}";
+            return $"一部のハブ管理 settings.json へ書けませんでした: {string.Join(" / ", result.Errors)}";
         }
 
         var mode = settings.UseHttpProxy ? "プロキシ環境" : "オープンネットワーク";
-        return $"VS Code ユーザー設定を {result.ProfilesWritten} 件のプロファイルへ適用しました（{mode}）。既に開いている窓では、必要ならウィンドウの再読み込みを行ってください。";
+        if (result.ProfilesWritten > 0)
+        {
+            return $"ハブ設定と {result.ProfilesWritten} 件の専用プロファイルへ {mode} を保存しました。標準の VS Code settings.json は変更していません。既に開いている窓では、必要なら再起動してください。";
+        }
+
+        return $"ハブ設定へ {mode} を保存しました。次回の VS Code 起動時にプロセス環境変数として渡します。標準の VS Code settings.json は変更していません。";
     }
 
     public void SaveApplicationPathSettings()

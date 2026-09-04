@@ -120,12 +120,15 @@ public static class SlotUserDataPaths
             DiagnosticLog.Write(ex);
         }
 
-        // 専用プロファイルでも User/settings.json は通常 VS Code と揃える。
-        // プロキシ等をパネルごとに書き換えなくてよいようにする。
-        // window.restoreWindows=none だけは専用プロファイル側に残し、余分な窓の復元を防ぐ。
+        // 専用プロファイルでも User/settings.json は Roaming の通常 VS Code と同じ実体にする。
+        // プロキシ等は通常起動の VS Code で保存した内容を、ハブ起動窓でもそのまま使う。
+        // リンクできた場合は Roaming 側へ restoreWindows を書かない。
         // storage.json / Cache / WebStorage はここでは触らない。
         try
         {
+            VscodeUserSettings.TryShareInstalledSettingsFile(
+                targetDirectory,
+                GetInstalledUserDataDirectory(codeCommand));
             VscodeUserSettings.SynchronizeDedicatedSlotSettings(targetDirectory, config, codeCommand);
         }
         catch (Exception ex)
@@ -199,9 +202,16 @@ public static class SlotUserDataPaths
 
         foreach (var fileName in SharedUserFiles)
         {
-            CopyFileIfNeeded(
-                Path.Combine(sourceUserDirectory, fileName),
-                Path.Combine(targetUserDirectory, fileName));
+            var sourcePath = Path.Combine(sourceUserDirectory, fileName);
+            var targetPath = Path.Combine(targetUserDirectory, fileName);
+            if (string.Equals(fileName, "settings.json", StringComparison.OrdinalIgnoreCase))
+            {
+                CopyFileIfMissing(sourcePath, targetPath);
+            }
+            else
+            {
+                CopyFileIfNeeded(sourcePath, targetPath);
+            }
         }
 
         foreach (var directoryName in SharedUserDirectories)
@@ -289,6 +299,16 @@ public static class SlotUserDataPaths
                 DirectoryInfo directoryInfo => $"D|{directoryInfo.Name}|{directoryInfo.LastWriteTimeUtc.Ticks}",
                 _ => $"X|{entry.Name}|{entry.LastWriteTimeUtc.Ticks}"
             });
+    }
+
+    private static void CopyFileIfMissing(string sourcePath, string targetPath)
+    {
+        if (File.Exists(targetPath) || !File.Exists(sourcePath))
+        {
+            return;
+        }
+
+        CopyFileIfNeeded(sourcePath, targetPath);
     }
 
     private static void CopyFileIfNeeded(string sourcePath, string targetPath)

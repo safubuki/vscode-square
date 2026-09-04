@@ -2381,7 +2381,7 @@
                                FontWeight="SemiBold"
                                Foreground="{StaticResource TextBrush}" />
                     <TextBlock Margin="0,4,0,8"
-                               Text="プロキシなどの User/settings.json は全パネルで共有します。サイドバー幅はパネル別に残し、サインインやチャット状態、Cache は書き換えません。"
+                               Text="ハブから起動した VS Code も、通常起動と同じ %APPDATA%\Code\User\settings.json（Roaming）を使います。専用プロファイルでもこのファイルへリンクし、プロキシは通常の VS Code で保存した内容が残ります。このアプリは Roaming の settings.json を書き換えません。サイドバー幅はパネル別に残し、サインインやチャット状態、Cache も触りません。"
                                Foreground="{StaticResource MutedTextBrush}"
                                TextWrapping="Wrap" />
                     <UniformGrid Columns="2" Margin="0,0,0,8">
@@ -2417,7 +2417,7 @@
                             MinWidth="122"
                             Click="ApplyVsCodeNetworkSettingsButton_Click"
                             Style="{StaticResource BaseButton}"
-                            ToolTip="開いている VS Code すべての User/settings.json へ一度で書き込みます" />
+                            ToolTip="ハブ設定へ保存し、専用プロファイルがある場合だけその settings.json へ書きます。標準の VS Code settings.json は変更しません" />
                   </StackPanel>
                 </Border>
 

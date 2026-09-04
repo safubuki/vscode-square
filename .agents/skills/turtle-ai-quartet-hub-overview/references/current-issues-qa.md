@@ -1,6 +1,6 @@
 ﻿# 現在の既知課題と QA 方針
 
-更新日: 2026-08-31
+更新日: 2026-09-03
 
 ## 重点 QA
 - 既定状態で 4 つの VS Code を起動し、2x2 に配置できること。
@@ -38,7 +38,10 @@
 - タイトルバーの `?` ヘルプに Codex / GitHub Copilot / Gemini / Claude Code / Grok Build の CLI 別カードが表示され、各カード内で `インストール` と `自律実行の起動オプション` が明確に分かれていること。Claude Code は公式インストーラの PowerShell / CMD コマンドと npm コマンドを表示し、Grok Build CLI は Git Bash / WSL と PowerShell のインストールコマンド、および `grok --always-approve` を表示すること。
 - `?` ヘルプの説明文とコマンドを選択コピーできること。コマンド欄は読み取り専用で実行操作を持たず、方式名を含めずコマンドだけをコピーできること。自律実行オプションには共通の注意書きと警告色が表示されること。
 - タイトルバーの `?` 左に歯車設定があり、VS Code / Antigravity / Codex / Claude / Copilot / Grok / Gemini / Codex Windows / ChatGPT Windows / Claude Windows / Antigravity2 Windows の起動コマンドを確認・編集・保存・再検出できること。
-- 歯車設定の「VS Code 共通ユーザー設定」で、オープンネットワークとプロキシ環境を切り替えて「全パネルへ適用」すると、各パネルで個別に `settings.json` を編集しなくても `User/settings.json` が揃うこと。テーマなど他のユーザー設定は消えないこと。サイドバー幅、サインイン、チャット履歴、Cache は変わらないこと。共有プロファイルでは `window.restoreWindows` を書き換えないこと。
+- 歯車設定の「VS Code 共通ユーザー設定」で、オープンネットワークとプロキシ環境を切り替えて「全パネルへ適用」すると、ハブ設定へ保存されること。専用プロファイルがある場合は、その `User/settings.json` のプロキシキーだけが更新され、テーマなど他のユーザー設定は消えないこと。標準の `%APPDATA%/Code/User/settings.json` はハブから変更されないこと。サイドバー幅、サインイン、チャット履歴、Cache は変わらないこと。共有プロファイルでは `window.restoreWindows` を書き換えないこと。
+- 専用プロファイルのパネルで Ctrl+Shift+P から `settings.json` を編集して保存した内容は、VS Code をハブから再起動しても消えないこと。標準プロファイルの `settings.json` でパネル側を丸ごと置き換えないこと。
+- 社内プロキシ用のコメント、`http.proxy`、`remote.SSH.httpsProxy`、`remote.SSH.localServerDownload`、`remote.SSH.remotePlatform` は専用プロファイル再起動後も残ること。コメントアウトしたプロキシ行を起動処理が有効化しないこと。
+- ハブから起動した VS Code の `User/settings.json` は、通常起動の `%APPDATA%/Code/User/settings.json`（Roaming）と同じ実体になること。通常起動側で保存したプロキシがハブ起動窓でも使えること。Roaming 側へ `window.restoreWindows=none` を書かないこと。
 - 歯車設定で、表の Quartet と控え Quartet の保存済みタイトル、パス、アプリ ID を一覧確認・編集・空化できること。
 - 歯車設定の不整合修復で、不完全な控えと重複控えを削除し、同じワークスペースを再登録できる状態に戻せること。
 - Claude / Grok などの CLI が PATH に出ていない環境でも、npm / pnpm / Volta の一般的な shim 置き場、Claude Code インストーラが使う `~\.local\bin`、Grok Build インストーラが使う `~\.grok\bin` から検出できること。

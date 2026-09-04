@@ -1,6 +1,6 @@
 ﻿# Turtle AI Code Quartet Hub 実装パターン・注意点
 
-更新日: 2026-08-31
+更新日: 2026-09-03
 
 ## 1. AI 状態監視を戻さない
 - AI 状態検出、UI Automation のチャット走査、拡張ログ解析、VS Code 外枠オーバーレイは削除済み。
@@ -42,7 +42,7 @@
 - スロットの実行中アクションボタン文言は `閉じる` にする。未起動時は `起動` / `新規`。
 - タイトルバー右上は縮小表示、`?` ヘルプ、歯車設定、最小化、閉じるの順に置く。ヘルプは Codex / GitHub Copilot / Gemini / Claude Code / Grok Build の CLI 別カードで構成し、各カード内を `インストール` と `自律実行の起動オプション` に分ける。方式名とコマンドを別表示にしてコマンドだけを正確にコピーできるようにし、自律実行オプションは警告色と共通の注意書きで通常の導入手順から区別する。IDE / Windows アプリは公式サイト参照とし、Claude Code は公式インストーラの PowerShell / CMD コマンドと npm コマンドを書く。本文とコマンドは選択コピーできるよう `TextBox IsReadOnly=True` で表示し、実行操作は持たせない。
 - CLI の導入方法は公式の最新情報を確認して更新し、README と `?` ヘルプで同じ選択肢を示す。Grok Build CLI の Windows 向け手順は Git Bash を経由させず、`irm https://x.ai/cli/install.ps1 | iex` を表示する。Git Bash / WSL 向けには `curl -fsSL https://x.ai/cli/install.sh | bash` を残す。
-- 歯車設定画面では IDE / CLI / Windows アプリの起動コマンドを編集し、`%LOCALAPPDATA%/TurtleAIQuartetHub/config/turtle-ai-quartet-hub.json` へ保存する。VS Code の設定は `CodeCommand` と `applications[].command` を同期させる。同じ画面の「VS Code 共通ユーザー設定」から、オープンネットワーク / プロキシ環境を全パネルの `User/settings.json` へ一度で適用できる。
+- 歯車設定画面では IDE / CLI / Windows アプリの起動コマンドを編集し、`%LOCALAPPDATA%/TurtleAIQuartetHub/config/turtle-ai-quartet-hub.json` へ保存する。VS Code の設定は `CodeCommand` と `applications[].command` を同期させる。同じ画面の「VS Code 共通ユーザー設定」から、オープンネットワーク / プロキシ環境をハブ設定へ保存できる。専用プロファイルがある場合だけその `User/settings.json` を更新し、標準の `%APPDATA%/Code/User/settings.json` は書き換えない。
 - 設定画面には表の Quartet と控え Quartet の保存状態を一覧表示する。表は `PanelTitle` / `Path` / `SavedWorkspacePath` / `SavedWorkspaceConfirmed` / `ApplicationId` を編集可能にし、控えは `PanelTitle` / `WorkspacePath` / `ApplicationId` を編集可能にする。空化ボタンと不整合修復ボタンを用意し、過去の重複控えや不完全な控えで再登録できない状態を解消できるようにする。
 - Codex / ChatGPT / Claude / Antigravity2 の Windows アプリ版は、補助ボタン行の左に `Windows` ラベルを置いて CLI と区別する。Antigravity2 の文言が収まる固定幅にそろえ、縮小表示でも行全体が隠れない幅を確保する。
 - 標準表示ではスロット領域をカード実寸の高さに詰め、控え Quartet までの黒い余白を作らない。下部の `Launch Quartet` ボタンも見切れないようにする。
@@ -156,11 +156,17 @@
   - サインイン / チャット履歴は `globalStorage` と WebStorage をコピーしない、消さない。
   - Cache / CachedExtensionVSIXs の 4 複製は戻さない。専用 user-data の既定も `false` のまま。
   - `window.restoreWindows=none` は専用プロファイルにだけ書く。共有の `%APPDATA%/Code/User/settings.json` には書かない（通常 VS Code の窓復元を壊すため）。
-- **対策**: 歯車設定の「全パネルへ適用」は対象プロファイルの `http.proxy` / `http.proxySupport` / `http.noProxy` だけを更新する。オープンネットワークは `http.proxy=""` と `http.proxySupport=off`（環境変数のプロキシも使わない）。プロキシ環境は指定 URL と `override`。専用プロファイル起動時は通常 VS Code の `settings.json` を土台にし、その上で `restoreWindows=none` と（管理開始後のみ）ネットワーク設定を載せる。
-- **注意**: `storage.json` の一括上書き、Cache のコピー、共有プロファイルへの `restoreWindows=none` 強制は戻さない。既に開いている VS Code ではプロキシ反映にウィンドウ再読み込みが必要な場合がある。ワークスペースの `.vscode/settings.json` は触らない。
+- **対策**: 歯車設定の「全パネルへ適用」はハブ設定へ保存する。専用プロファイルがある場合だけ、その `http.proxy` / `http.proxySupport` / `http.noProxy` を更新する。オープンネットワークは専用プロファイル側で `http.proxy=""` と `http.proxySupport=off`。プロキシ環境は指定 URL と `override`。標準の `%APPDATA%/Code/User/settings.json` は読んでも書かない。起動時は `ManageVsCodeUserSettings` が true のときだけ VS Code プロセスへ `HTTP_PROXY` / `NO_PROXY` を渡す。
+- **注意**: `storage.json` の一括上書き、Cache のコピー、共有プロファイルへの `restoreWindows=none` 強制は戻さない。既に開いている VS Code ではプロキシ反映にウィンドウ再起動が必要な場合がある。ワークスペースの `.vscode/settings.json` は触らない。標準の VS Code `settings.json` をハブから書き換えない。2026-09-03 以降、専用プロファイルでも `settings.json` だけを Roaming へハードリンクする。これは「ユーザー設定は一つにまとめる」判断に沿う。`User` フォルダ全体・`storage.json`・`globalStorage`・Cache の共有やコピーは戻さない。
 
 ## 14. SSH 接続名を含むワークスペース照合（2026-09-01 追加）
 - **ファイル**: `VscodeWorkspaceState.cs`, `TurtleAIQuartetHub.Panel.Tests/VscodeWorkspaceStateTests.cs`
 - **問題**: 異なる SSH 接続先で同名フォルダを開くと、フォルダ名の一致スコアが同点になり、`workspaceStorage` で先に並んだ古い `vscode-remote://ssh-remote+...` URI を現在値として保存することがあった。次回起動でも古い SSH 接続名を再利用するため、廃止済み接続先では接続に失敗する。
 - **対策**: VS Code タイトルに `[SSH: 接続名]` が見える場合は、URI authority の `ssh-remote+接続名` と一致しない候補を除外し、一致する候補へ最優先スコアを与える。選択された現在 URI は既存の `StatusStore` 経路で `Path` / `SavedWorkspacePath` / `slots.json` へ保存する。
 - **注意**: 2026-08-27 のフォルダ名・ファイル名誤判定防止を維持し、単純な `Contains` へ戻さない。カスタム `window.title` で `[SSH: ...]` が出ない場合はフォルダ名照合へフォールバックし、候補を根拠なく破棄しない。Remote-SSH の履歴や認証情報、`workspaceStorage` 自体は削除しない。
+
+## 15. パネル別 settings.json の保持（2026-09-03 追加）
+- **ファイル**: `VscodeUserSettings.cs`, `SlotUserDataPaths.cs`, `VscodeLauncher.cs`, `TurtleAIQuartetHub.Panel.Tests/VscodeUserSettingsTests.cs`
+- **問題**: 専用 user-data の各パネルで Ctrl+Shift+P から `settings.json` を編集して保存しても、次回起動がファイル全体を JSON として読み直して書き戻していた。社内プロキシ切替用のコメント、`remote.SSH.httpsProxy`、`remote.SSH.remotePlatform` が消えて「設定が戻った」ように見える。SSH 接続中の別 PC（例: `%LOCALAPPDATA%/TurtleAIQuartetHub/user-data/A/User/settings.json`）で再現する。
+- **対策**: 専用プロファイルでも `User/settings.json` は `%APPDATA%/Code/User/settings.json`（Roaming）と同じ実体へハードリンクする。通常起動の VS Code で保存したプロキシが、ハブ起動窓でもそのまま使われる。リンクできた場合は Roaming へ `window.restoreWindows` を書かない。リンク前の専用ファイルは `settings.json.quartet-bak` に退避する。リンクできないときだけ専用ファイルを JSONC パッチし、コメントと `remote.SSH.*` を残す。
+- **注意**: ハードリンクは Roaming の内容を書き換えない。JsonNode で読み書きするとコメントが落ちるため、専用プロファイルの既存ファイルには使わない。ワークスペースの `.vscode/settings.json` は触らない。
